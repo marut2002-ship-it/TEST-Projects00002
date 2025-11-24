@@ -26,8 +26,6 @@
         tbody tr:hover { background-color: #F3F4F6; } .dark tbody tr:hover { background-color: #374151; }
         
         /* --- FullCalendar Customization --- */
-        
-        /* Grid Event (Compact) */
         .fc-daygrid-event { 
             padding: 2px 4px !important; 
             border-radius: 4px; 
@@ -42,43 +40,34 @@
         }
         .fc-daygrid-event:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10; }
         
-        /* More Link */
-        .fc-daygrid-more-link { color: #3B82F6 !important; font-weight: 600; font-size: 0.75rem !important; margin-top: 2px; display: inline-block; cursor: pointer; }
-        .dark .fc-daygrid-more-link { color: #60a5fa !important; }
-
-        /* Popover (More Info) */
+        /* Popover Styling */
         .fc-popover { 
             z-index: 50 !important; 
             border-radius: 0.5rem !important; 
             box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2) !important; 
             min-width: 260px; 
         }
+        /* รายการใน Popover ให้ขยายเต็ม */
         .fc-popover .fc-daygrid-event {
-            padding: 8px 10px !important;
+            padding: 6px 8px !important;
             margin-bottom: 4px !important;
             font-size: 0.85rem !important; 
             white-space: normal !important; 
             display: block !important;
-            border-radius: 6px !important;
         }
-        
-        /* Control visibility */
-        .fc-popover .compact-view { display: none !important; }
-        .fc-popover .full-view { display: block !important; }
-        .fc-daygrid-day-events .full-view { display: none !important; }
-        
-        /* Dark Mode */
+        .fc-popover .compact-view { display: none !important; } /* ซ่อนแบบย่อ */
+        .fc-popover .full-view { display: block !important; } /* โชว์แบบเต็ม */
+        .fc-daygrid-day-events .full-view { display: none !important; } /* ในตารางซ่อนแบบเต็ม */
+
         .dark .fc-popover { background-color: #1f2937 !important; border-color: #4b5563 !important; }
         .dark .fc-popover-header { background-color: #374151 !important; color: #f9fafb !important; }
         .dark .fc-popover-body { color: #e5e7eb !important; }
         .dark .fc-daygrid-event { color: #e5e7eb; }
+        .fc-daygrid-more-link { color: #3B82F6 !important; font-weight: 600; font-size: 0.75rem !important; margin-top: 2px; display: inline-block; cursor: pointer; }
+        .dark .fc-daygrid-more-link { color: #60a5fa !important; }
 
-        /* --- ปรับความกว้างวันอาทิตย์ (Sun Narrow) --- */
-        /* ใช้ nth-child selector เพื่อบีบ Column แรก (วันอาทิตย์) */
-        .fc-col-header-cell:first-child, 
-        .fc-daygrid-day:first-child {
-            width: 6% !important; /* ปรับให้เล็กลง */
-        }
+        /* Sun Narrow */
+        .fc-col-header-cell:first-child, .fc-daygrid-day:first-child { width: 6% !important; }
     </style>
 </head>
 <body class="bg-gray-50 font-sans">
@@ -92,7 +81,7 @@
             </form>
             <div id="loginError" class="mt-4 p-3 bg-red-100 text-red-700 rounded-xl hidden"></div>
         </div>
-        <p class="text-center text-xs text-gray-400 mt-4">Version 16.0 (Sun Narrow + Fixes)</p>
+        <p class="text-center text-xs text-gray-400 mt-4">Version 17.0 (Final Perfect)</p>
     </div>
 
     <div id="mainApp" class="hidden" x-data="{ navOpen: false }">
@@ -198,10 +187,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('togglePassword').addEventListener('click', togglePasswordVisibility);
     checkSession();
     
+    // Modal Handlers
     const modal = document.getElementById('eventModal');
     document.getElementById('closeModalBtn').addEventListener('click', () => modal.classList.remove('is-active'));
     modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('is-active') });
     
+    // Password Form Handler
     document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const oldPass = document.getElementById('oldPassword').value;
@@ -227,6 +218,7 @@ async function initializeApp(){
     document.getElementById('userDisplay').textContent = currentUser.fullName;
     document.getElementById('subtitleDisplay').textContent = (currentUser.position && currentUser.position.trim() !== '') ? currentUser.position : currentUser.role;
     
+    // Hide Activity Log menu item if employee
     if (currentUser.role.toLowerCase() === 'employee') {
         if(document.getElementById('activity-menu-item')) document.getElementById('activity-menu-item').style.display = 'none';
     }
@@ -330,8 +322,8 @@ function populateSelect(selectElement, options, selectedValue) { const currentVa
 function updateStatsCards(data){ const container=document.getElementById('stats-cards'); container.innerHTML = `<div class="stats-card rounded-xl shadow-md p-5 flex items-center space-x-4 bg-gradient-to-br from-blue-400 to-blue-600 text-white"><div class="bg-white/30 p-3 rounded-full"><i class="fas fa-calendar-check fa-lg"></i></div><div><p class="text-sm opacity-90">แผนงาน (ที่แสดง)</p><p class="text-2xl font-bold">${data.length}</p></div></div><div class="stats-card rounded-xl shadow-md p-5 flex items-center space-x-4 bg-gradient-to-br from-green-400 to-green-600 text-white"><div class="bg-white/30 p-3 rounded-full"><i class="fas fa-store fa-lg"></i></div><div><p class="text-sm opacity-90">จำนวนสาขา (ที่แสดง)</p><p class="text-2xl font-bold">${new Set(data.map(r=>r[6])).size}</p></div></div><div class="stats-card rounded-xl shadow-md p-5 flex items-center space-x-4 bg-gradient-to-br from-purple-400 to-purple-600 text-white"><div class="bg-white/30 p-3 rounded-full"><i class="fas fa-users fa-lg"></i></div><div><p class="text-sm opacity-90">จำนวนพนักงาน (ที่แสดง)</p><p class="text-2xl font-bold">${new Set(data.map(r=>r[11])).size}</p></div></div>`; }
 function openViewModal(id){const eventData=masterData.schedules.find(row=>row[0]===id);if(!eventData)return;const[schId,ts,user,date,st,et,branch,details,status,area,region,nickname]=eventData;showCalendarEventModal({id: schId, nickname,workDate:date,startTime:st,endTime:et,branch,area,region,details})}
 async function openEditModal(id){ 
+    // ปิด Modal ปฏิทิน และ Popover
     document.getElementById('eventModal').classList.remove('is-active');
-    // ปิด Popover ด้วย
     const popovers = document.querySelectorAll('.fc-popover');
     popovers.forEach(p => p.style.display = 'none');
 
@@ -370,7 +362,7 @@ function initCalendarPage(){
                 info.el.style.backgroundColor = userColor; 
             } 
         }, 
-        // --- กลับมาใช้ Formatter 2 Lines แบบเดิม ---
+        // --- Formatter 2 Lines ---
         eventContent: (arg) => { 
             const props = arg.event.extendedProps; 
             if (arg.view.type.startsWith('list')) { 
@@ -378,12 +370,12 @@ function initCalendarPage(){
                 return { html: `<div class="flex items-center gap-3 w-full"><div class="fc-list-event-dot" style="border-color: ${userColor}"></div><div class="fc-event-time">${arg.timeText}</div><div class="fc-event-title"><span class="font-semibold">${props.nickname}</span> <span class="text-gray-500">(${props.branch})</span></div></div>` }; 
             } 
             
-            // Grid View (2 Lines Standard)
+            // เวลาและชื่อสำหรับการแสดงผล
             const timeDisplay = props.startTime ? props.startTime : '';
             
             return { 
                 html: `
-                <div class="flex flex-col w-full overflow-hidden">
+                <div class="flex flex-col w-full overflow-hidden compact-view" title="${props.startTime || ''} ${props.nickname} - ${props.branch}">
                     <div class="flex justify-between items-center w-full">
                         <div class="font-bold text-xs truncate flex items-center gap-1">
                             <i class="fas fa-user text-[9px] opacity-70"></i> ${props.nickname}
@@ -392,6 +384,17 @@ function initCalendarPage(){
                     </div>
                     <div class="text-[10px] truncate flex items-center gap-1 mt-[1px]">
                         <i class="fas fa-store text-[9px] opacity-70"></i> ${props.branch}
+                    </div>
+                </div>
+                <div class="flex flex-col w-full overflow-hidden full-view hidden">
+                    <div class="flex justify-between items-center w-full">
+                        <div class="font-bold text-sm flex items-center gap-1">
+                            <i class="fas fa-user text-xs opacity-70"></i> ${props.nickname}
+                        </div>
+                        <div class="text-xs opacity-90 font-mono">${timeDisplay}</div>
+                    </div>
+                    <div class="text-xs flex items-center gap-1 mt-1">
+                        <i class="fas fa-store text-xs opacity-70"></i> ${props.branch}
                     </div>
                 </div>` 
             }; 
@@ -403,6 +406,29 @@ function initCalendarPage(){
     
     const userFilter=document.getElementById('calendar-user-filter'),filterContainer=document.getElementById('calendar-filter-container'); if(currentUser.role.toLowerCase()!=='employee'&&masterData.users.length>0){ filterContainer.classList.remove('hidden'); userFilter.addEventListener('change',()=>{ const selectedUser=userFilter.value; const filteredEvents=selectedUser==='all'?events:events.filter(e=>e.extendedProps.user===selectedUser); fullCalendarInstance.removeAllEvents(); fullCalendarInstance.addEventSource(filteredEvents); }); } fullCalendarInstance.render(); document.getElementById('calendar-refresh-button').addEventListener('click',()=>refreshDataAndShowPage('calendar')); 
 }
+// --- Modal Detail Logic ---
+function showCalendarEventModal(props){ 
+    // Ensure any popovers are closed
+    const popovers = document.querySelectorAll('.fc-popover');
+    popovers.forEach(p => p.style.display = 'none');
+
+    const modal=document.getElementById('eventModal'),modalTitle=document.getElementById('modalTitle'),modalContent=document.getElementById('modalContent'); 
+    modalTitle.textContent = `รายละเอียดตารางงาน`; 
+    
+    const today = new Date(); today.setHours(0,0,0,0);
+    const workDate = new Date(props.workDate); workDate.setHours(0,0,0,0);
+    const diffDays = Math.ceil((today - workDate) / (1000 * 60 * 60 * 24));
+    // Logic Permission Check
+    const canManage = (currentUser.role.toLowerCase() !== 'employee') || (diffDays <= EDIT_DELETE_WINDOW_DAYS && props.user === currentUser.username);
+    const btnsHtml = canManage ? `<div class="mt-4 flex gap-2 justify-end border-t pt-4 dark:border-gray-600"><button onclick="openEditModal('${props.id}')" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"><i class="fas fa-pen mr-1"></i>แก้ไข</button><button onclick="handleDelete('${props.id}')" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"><i class="fas fa-trash mr-1"></i>ลบ</button></div>` : '';
+
+    modalContent.innerHTML = `<div class="flex items-center text-sm py-2 border-b dark:border-gray-600"><i class="fas fa-user fa-fw w-8 text-center text-gray-400"></i><div><div class="text-xs text-gray-500">พนักงาน</div><div class="font-semibold">${props.nickname}</div></div></div><div class="flex items-center text-sm py-2 border-b dark:border-gray-600"><i class="fas fa-calendar-day fa-fw w-8 text-center text-gray-400"></i><div><div class="text-xs text-gray-500">วันที่</div><div class="font-semibold">${formatDateForDisplay(props.workDate)}</div></div></div><div class="flex items-center text-sm py-2 border-b dark:border-gray-600"><i class="fas fa-clock fa-fw w-8 text-center text-gray-400"></i><div><div class="text-xs text-gray-500">เวลา</div><div class="font-semibold">${props.startTime||'-'} - ${props.endTime||'-'}</div></div></div><div class="flex items-center text-sm py-2 border-b dark:border-gray-600"><i class="fas fa-store fa-fw w-8 text-center text-gray-400"></i><div><div class="text-xs text-gray-500">สาขา/ประเภทการลา</div><div class="font-semibold">${props.branch}</div></div></div><div class="flex items-center text-sm py-2 border-b dark:border-gray-600"><i class="fas fa-map-marked-alt fa-fw w-8 text-center text-gray-400"></i><div><div class="text-xs text-gray-500">เขต / ภาค</div><div class="font-semibold">${props.area||'-'} / ${props.region||'-'}</div></div></div><div class="flex items-start text-sm py-2"><i class="fas fa-info-circle fa-fw w-8 text-center text-gray-400 mt-1"></i><div><div class="text-xs text-gray-500">รายละเอียด</div><div class="font-semibold whitespace-pre-wrap">${props.details||'-'}</div></div></div>${btnsHtml}`; 
+    modal.classList.add('is-active'); 
+}
+function initScheduleFormLogic(elements, mode = 'create') { const { period, startH, startM, endH, endM, details, area, region, branchContainer } = elements; populateHourDropdown(startH); populateMinuteDropdown(startM); populateHourDropdown(endH); populateMinuteDropdown(endM); if(mode === 'edit') { const datalist = branchContainer.querySelector('datalist'); if (datalist) datalist.innerHTML = masterData.branches.map(b=>`<option value="${b[0]}"></option>`).join(''); } const originalBranchHTML = branchContainer.innerHTML; period.addEventListener('change', (e) => { const value = e.target.value; [startH, startM, endH, endM].forEach(el => { el.disabled = false; el.required = true; }); branchContainer.innerHTML = originalBranchHTML; const newBranchInput = branchContainer.querySelector('input'); if (newBranchInput && mode === 'edit') { const datalist = branchContainer.querySelector('datalist'); if(datalist) datalist.innerHTML = masterData.branches.map(b=>`<option value="${b[0]}"></option>`).join(''); } switch(value) { case 'morning': startH.value = '08'; startM.value = '30'; endH.value = '12'; endM.value = '00'; break; case 'afternoon': startH.value = '13'; startM.value = '00'; endH.value = '17'; endM.value = '30'; break; case 'evening': startH.value = '16'; startM.value = '30'; endH.value = '18'; endM.value = '30'; break; case 'full': startH.value = '08'; startM.value = '30'; endH.value = '17'; endM.value = '30'; break; case 'leave': [startH, startM, endH, endM].forEach(el => { el.value = ''; el.disabled = true; el.required = false; }); area.value = ''; region.value = ''; const leaveSelectId = mode === 'edit' ? 'edit-leave-type' : 'schedule-leave-type'; const leaveLabel = `<label for="${leaveSelectId}" class="block text-sm font-medium">ประเภทการลา</label>`; branchContainer.innerHTML = `<div>${leaveLabel}<select id="${leaveSelectId}" class="w-full mt-1 p-2 border rounded-md" required><option value="">-- เลือกประเภท --</option><option value="ลาพักร้อน">ลาพักร้อน</option><option value="ลาป่วย">ลาป่วย</option><option value="ลากิจ">ลากิจ</option></select></div>`; const leaveSelect = document.getElementById(leaveSelectId); leaveSelect.addEventListener('change', () => { details.value = leaveSelect.value; }); break; default: [startH, startM, endH, endM].forEach(el => el.value = ''); break; } }); const branchMap=new Map(masterData.branches.map(b=>[b[0],{area:b[1],region:b[2]}])); const updateAreaRegion = (e) => { const info=branchMap.get(e.target.value); area.value = info ? info.area : ''; region.value = info ? info.region : ''; }; branchContainer.addEventListener('input', (e) => { if (e.target.matches('input[list]')) { updateAreaRegion(e); } }); }
+function initScheduleFormPage(){ const elements = { date: document.getElementById('scheduleDate'), endDate: document.getElementById('scheduleEndDate'), username: document.getElementById('scheduleUsername'), period: document.getElementById('schedulePeriod'), startH: document.getElementById('scheduleStartHour'), startM: document.getElementById('scheduleStartMinute'), endH: document.getElementById('scheduleEndHour'), endM: document.getElementById('scheduleEndMinute'), area: document.getElementById('scheduleArea'), region: document.getElementById('scheduleRegion'), details: document.getElementById('scheduleDetails'), branchContainer: document.getElementById('branch-container-wrapper') }; elements.username.value=currentUser.username; elements.date.valueAsDate=new Date; document.getElementById('branch-list').innerHTML=masterData.branches.map(b=>`<option value="${b[0]}"></option>`).join(''); initScheduleFormLogic(elements, 'create'); document.getElementById('scheduleForm').addEventListener('submit',handleSaveSchedule); elements.date.addEventListener('change', (e) => { elements.endDate.value = e.target.value; }); }
+async function handleSaveSchedule(e){e.preventDefault(); const btn=document.getElementById('saveScheduleBtn'); const startH = document.getElementById('scheduleStartHour').value, startM = document.getElementById('scheduleStartMinute').value; const endH = document.getElementById('scheduleEndHour').value, endM = document.getElementById('scheduleEndMinute').value; const startTime = (startH && startM) ? `${startH}:${startM}` : ''; const endTime = (endH && endM) ? `${endH}:${endM}` : ''; const payload={username:currentUser.username,workDate:document.getElementById('scheduleDate').value,endDate:document.getElementById('scheduleEndDate').value,startTime:startTime,endTime:endTime,branch:document.getElementById('scheduleBranch')?.value || document.getElementById('schedule-leave-type')?.value,details:document.getElementById('scheduleDetails').value,area:document.getElementById('scheduleArea').value,region:document.getElementById('scheduleRegion').value}; btn.disabled=true;btn.textContent='กำลังบันทึก...'; try{ await apiCall({action:'saveSchedule',payload}); Swal.fire({title:'สำเร็จ!',text:'บันทึกข้อมูลเรียบร้อย',icon:'success',toast:true,position:'top-end',showConfirmButton:false,timer:3000}); await refreshDataAndShowPage('dashboard'); }catch(error){ Swal.fire('ผิดพลาด!',error.message,'error'); }finally{ btn.disabled=false;btn.textContent='บันทึก'; } }
+async function loadActivityLogs(){const tableBody=document.getElementById('activityTableBody');tableBody.innerHTML=`<tr><td colspan="3" class="p-6 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</td></tr>`;try{const response=await apiCall({action:'getActivityLogs'});tableBody.innerHTML=response.data.length===0?`<tr><td colspan="3" class="p-6 text-center text-gray-500">ไม่พบข้อมูล</td></tr>`:response.data.map(([ts,user,act])=>`<tr><td class="p-3 text-sm">${ts}</td><td class="p-3 text-sm">${user}</td><td class="p-3 text-sm">${act}</td></tr>`).join('')}catch(error){tableBody.innerHTML=`<tr><td colspan="3" class="p-6 text-center text-red-500">โหลดข้อมูลล้มเหลว</td></tr>`}}
 </script>
 </body>
 </html>
