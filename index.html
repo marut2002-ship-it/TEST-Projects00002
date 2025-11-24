@@ -25,14 +25,10 @@
         tbody tr:nth-child(even) { background-color: #F9FAFB; } .dark tbody tr:nth-child(even) { background-color: #1f2937; }
         tbody tr:hover { background-color: #F3F4F6; } .dark tbody tr:hover { background-color: #374151; }
         
-        /* FullCalendar Customization */
-        .fc-popover { z-index: 50 !important; border-radius: 0.5rem !important; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1) !important; }
-        .dark .fc-popover { background-color: #1f2937 !important; border-color: #4b5563 !important; }
-        .dark .fc-popover-header { background-color: #374151 !important; color: #f9fafb !important; }
-        .dark .fc-popover-body { color: #e5e7eb !important; }
+        /* --- FullCalendar Customization --- */
         
-        /* Event Style: Compact 2 Lines */
-        .fc .fc-daygrid-event { 
+        /* Grid Event (Compact) */
+        .fc-daygrid-event { 
             padding: 2px 4px !important; 
             border-radius: 4px; 
             color: white; 
@@ -41,17 +37,48 @@
             border: none;
             margin-bottom: 1px;
             cursor: pointer;
-            font-size: 0.75rem; /* ตัวหนังสือพอดีอ่าน */
+            font-size: 0.75rem;
             line-height: 1.3;
         }
-        .fc .fc-daygrid-event:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10; }
+        .fc-daygrid-event:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10; }
         
-        .fc-event-title, .fc-event-branch { display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .dark .fc-daygrid-event { color: #e5e7eb; }
-        
-        /* More Link (+x more) */
-        .fc-daygrid-more-link { color: #3B82F6 !important; font-weight: 600; font-size: 0.75rem !important; margin-top: 2px; display: inline-block; }
+        /* More Link */
+        .fc-daygrid-more-link { color: #3B82F6 !important; font-weight: 600; font-size: 0.75rem !important; margin-top: 2px; display: inline-block; cursor: pointer; }
         .dark .fc-daygrid-more-link { color: #60a5fa !important; }
+
+        /* Popover (More Info) */
+        .fc-popover { 
+            z-index: 50 !important; 
+            border-radius: 0.5rem !important; 
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2) !important; 
+            min-width: 260px; 
+        }
+        .fc-popover .fc-daygrid-event {
+            padding: 8px 10px !important;
+            margin-bottom: 4px !important;
+            font-size: 0.85rem !important; 
+            white-space: normal !important; 
+            display: block !important;
+            border-radius: 6px !important;
+        }
+        
+        /* Control visibility */
+        .fc-popover .compact-view { display: none !important; }
+        .fc-popover .full-view { display: block !important; }
+        .fc-daygrid-day-events .full-view { display: none !important; }
+        
+        /* Dark Mode */
+        .dark .fc-popover { background-color: #1f2937 !important; border-color: #4b5563 !important; }
+        .dark .fc-popover-header { background-color: #374151 !important; color: #f9fafb !important; }
+        .dark .fc-popover-body { color: #e5e7eb !important; }
+        .dark .fc-daygrid-event { color: #e5e7eb; }
+
+        /* --- ปรับความกว้างวันอาทิตย์ (Sun Narrow) --- */
+        /* ใช้ nth-child selector เพื่อบีบ Column แรก (วันอาทิตย์) */
+        .fc-col-header-cell:first-child, 
+        .fc-daygrid-day:first-child {
+            width: 6% !important; /* ปรับให้เล็กลง */
+        }
     </style>
 </head>
 <body class="bg-gray-50 font-sans">
@@ -65,7 +92,7 @@
             </form>
             <div id="loginError" class="mt-4 p-3 bg-red-100 text-red-700 rounded-xl hidden"></div>
         </div>
-        <p class="text-center text-xs text-gray-400 mt-4">Version 15.0 (2-Line Format)</p>
+        <p class="text-center text-xs text-gray-400 mt-4">Version 16.0 (Sun Narrow + Fixes)</p>
     </div>
 
     <div id="mainApp" class="hidden" x-data="{ navOpen: false }">
@@ -171,12 +198,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('togglePassword').addEventListener('click', togglePasswordVisibility);
     checkSession();
     
-    // Modal Handlers
     const modal = document.getElementById('eventModal');
     document.getElementById('closeModalBtn').addEventListener('click', () => modal.classList.remove('is-active'));
     modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('is-active') });
     
-    // Password Form Handler
     document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const oldPass = document.getElementById('oldPassword').value;
@@ -202,7 +227,6 @@ async function initializeApp(){
     document.getElementById('userDisplay').textContent = currentUser.fullName;
     document.getElementById('subtitleDisplay').textContent = (currentUser.position && currentUser.position.trim() !== '') ? currentUser.position : currentUser.role;
     
-    // Hide Activity Log menu item if employee
     if (currentUser.role.toLowerCase() === 'employee') {
         if(document.getElementById('activity-menu-item')) document.getElementById('activity-menu-item').style.display = 'none';
     }
@@ -346,7 +370,7 @@ function initCalendarPage(){
                 info.el.style.backgroundColor = userColor; 
             } 
         }, 
-        // --- Formatter 2 Lines ---
+        // --- กลับมาใช้ Formatter 2 Lines แบบเดิม ---
         eventContent: (arg) => { 
             const props = arg.event.extendedProps; 
             if (arg.view.type.startsWith('list')) { 
@@ -354,7 +378,7 @@ function initCalendarPage(){
                 return { html: `<div class="flex items-center gap-3 w-full"><div class="fc-list-event-dot" style="border-color: ${userColor}"></div><div class="fc-event-time">${arg.timeText}</div><div class="fc-event-title"><span class="font-semibold">${props.nickname}</span> <span class="text-gray-500">(${props.branch})</span></div></div>` }; 
             } 
             
-            // 2 บรรทัด: (ชื่อ+เวลา) / (สาขา)
+            // Grid View (2 Lines Standard)
             const timeDisplay = props.startTime ? props.startTime : '';
             
             return { 
@@ -364,7 +388,7 @@ function initCalendarPage(){
                         <div class="font-bold text-xs truncate flex items-center gap-1">
                             <i class="fas fa-user text-[9px] opacity-70"></i> ${props.nickname}
                         </div>
-                        <div class="text-[10px] opacity-90 font-mono">${timeDisplay}</div>
+                        <div class="text-[10px] opacity-90 font-mono flex-shrink-0 pl-1">${timeDisplay}</div>
                     </div>
                     <div class="text-[10px] truncate flex items-center gap-1 mt-[1px]">
                         <i class="fas fa-store text-[9px] opacity-70"></i> ${props.branch}
