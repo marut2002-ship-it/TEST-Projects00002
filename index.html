@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -174,7 +175,7 @@
       const API_URL = "https://script.google.com/macros/s/AKfycbxQ0b5oPHnR_J5_fPOcUtGihmq-pjdQ3Fhy_KZwTLPvHi4LUwGWQn8aIU4yydJFWdeGnw/exec";
 
       // --- TYPES & ENUMS ---
-      const LicenseType = { LIFE: 'Life Insurance (นช)', NON_LIFE: 'Non-Life Insurance (นว)' };
+      const LicenseType = { LIFE: 'ประกันชีวิต (นช)', NON_LIFE: 'ประกันวินาศภัย (นว)' };
       const ExamMode = { SELF: 'Self-Passed (สอบเอง)', COMPANY: 'Company-Passed (สอบกับบริษัท)' };
       const RegistrationStatus = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED' };
       const BatchStatus = { NOT_JOINED_LINE: 'ยังไม่เข้าห้องไลน์', JOINED_LINE: 'เข้าห้องไลน์', MORNING_SESSION: 'รอบเช้า', AFTERNOON_SESSION: 'รอบบ่าย', COMPLETED: 'สมบูรณ์', WAIVED: 'สละสิทธิ์' };
@@ -471,21 +472,22 @@
 
         const [files, setFiles] = useState({ photo: null, idCard: null, examResult: null, receipt: null, bankBook: null, idCopyReimburse: null });
 
+        const fetchSessions = async () => {
+            if (!formData.licenseType) return;
+            setLoadingSessions(true);
+            setSessionError(null);
+            try {
+                const data = await api.getSessions(formData.licenseType);
+                setSessions(data);
+            } catch (e) { 
+                console.error(e); 
+                setSessionError(e.message || "ไม่สามารถดึงข้อมูลได้");
+            } finally { 
+                setLoadingSessions(false); 
+            }
+        };
+
         useEffect(() => {
-          const fetchSessions = async () => {
-              if (!formData.licenseType) return;
-              setLoadingSessions(true);
-              setSessionError(null);
-              try {
-                  const data = await api.getSessions(formData.licenseType);
-                  setSessions(data);
-              } catch (e) { 
-                  console.error(e); 
-                  setSessionError(e.message || "ไม่สามารถดึงข้อมูลได้");
-              } finally { 
-                  setLoadingSessions(false); 
-              }
-          };
           fetchSessions();
         }, [formData.licenseType]);
 
@@ -617,10 +619,13 @@
                                             <LucideAlertCircle className="w-10 h-10 text-red-500 mx-auto mb-2"/>
                                             <p className="text-red-700 font-bold">ไม่สามารถโหลดข้อมูลได้</p>
                                             <p className="text-red-500 text-sm">{sessionError}</p>
-                                            <p className="text-xs text-slate-400 mt-4">กรุณาตรวจสอบว่าคุณได้อัปเดต API_URL ใน index.html ให้ถูกต้องแล้วหรือไม่</p>
+                                            <button type="button" onClick={fetchSessions} className="mt-4 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 font-bold text-sm">ลองใหม่อีกครั้ง</button>
                                         </div>
                                     ) : sessions.length === 0 ? (
-                                        <p className="text-center p-10 text-slate-400">ไม่พบรุ่นอบรม</p>
+                                        <div className="text-center p-10 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+                                            <p className="text-slate-500">ไม่พบรุ่นอบรมสำหรับประเภทนี้</p>
+                                            <button type="button" onClick={fetchSessions} className="mt-4 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 font-bold text-sm">รีเฟรชข้อมูล</button>
+                                        </div>
                                     ) : (
                                      <div className="grid md:grid-cols-2 gap-4">
                                         {sessions.map(s => {
