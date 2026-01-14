@@ -152,7 +152,8 @@
         LucideQrCode, LucideMaximize2, LucideBanknote, LucideClock, LucideTrendingUp,
         LucideFilter, LucideCamera, LucideSave, LucidePrinter, LucideCopy, 
         LucideFileSpreadsheet, LucideImages, LucideCheckSquare, LucideArchive,
-        LucideXCircle, LucideLayoutGrid, LucideEdit, LucideActivity, LucideRefreshCw
+        LucideXCircle, LucideLayoutGrid, LucideEdit, LucideActivity, LucideRefreshCw,
+        LucideSparkles, LucideImage
       } = lucide;
 
       // --- RECHARTS ADAPTER ---
@@ -252,7 +253,7 @@
       };
 
       // --- REUSABLE COMPONENTS ---
-      const InputField = ({ label, required, rightIcon, ...props }) => (
+      const InputField = ({ label, required, rightIcon, helper, ...props }) => (
         <div className="group relative">
             <label className="block text-sm font-semibold text-slate-700 mb-2 transition-colors group-focus-within:text-brand-600">
                 {label} {required && <span className="text-red-500">*</span>}
@@ -265,6 +266,7 @@
                 />
                 {rightIcon && <div className="absolute right-4 top-1/2 -translate-y-1/2">{rightIcon}</div>}
             </div>
+            {helper && <div className="mt-1">{helper}</div>}
         </div>
       );
 
@@ -289,11 +291,31 @@
         </div>
       );
 
-      const FileInput = ({ label, subLabel, required, onChange, variant = 'blue', exampleUrl, onPreview }) => {
+      const FileInput = ({ label, subLabel, required, onChange, variant = 'blue', exampleUrl, onPreview, value }) => {
         const isGreen = variant === 'green';
         const borderColor = isGreen ? 'hover:border-emerald-400' : 'hover:border-brand-400';
         const iconColor = isGreen ? 'text-emerald-500' : 'text-brand-500';
         const bgHover = isGreen ? 'group-hover:bg-emerald-50' : 'group-hover:bg-brand-50';
+
+        if (value) {
+            return (
+                <div className={`relative border-2 border-solid ${isGreen ? 'border-emerald-400 bg-emerald-50' : 'border-brand-400 bg-brand-50'} rounded-2xl p-6 text-center animate-fadeIn`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-white ${isGreen ? 'text-emerald-500' : 'text-brand-500'} shadow-sm`}>
+                        <LucideCheckCircle className="w-6 h-6" />
+                    </div>
+                    <label className={`block text-sm font-bold ${isGreen ? 'text-emerald-800' : 'text-brand-800'} mb-1`}>
+                         แนบไฟล์เรียบร้อย
+                    </label>
+                    <p className={`text-xs ${isGreen ? 'text-emerald-600' : 'text-brand-600'} mb-3 truncate px-4`}>{value.name}</p>
+                    <div className="relative inline-block">
+                        <button type="button" className={`text-xs font-bold px-4 py-2 rounded-full border ${isGreen ? 'border-emerald-200 text-emerald-600 bg-white hover:bg-emerald-100' : 'border-brand-200 text-brand-600 bg-white hover:bg-brand-100'} transition-colors`}>
+                            เปลี่ยนไฟล์
+                        </button>
+                        <input type="file" onChange={onChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                    </div>
+                </div>
+            )
+        }
 
         return (
             <div className={`group relative border-2 border-dashed border-slate-300 rounded-2xl p-6 transition-all cursor-pointer text-center bg-white ${borderColor} hover:shadow-sm`}>
@@ -327,6 +349,34 @@
             <span className="text-slate-800 font-semibold">{value || '-'}</span>
         </div>
       );
+      
+      const PreviewThumb = ({ file, label }) => {
+          if (!file) return null;
+          const [preview, setPreview] = useState(null);
+          useEffect(() => {
+              if (file) {
+                  const url = URL.createObjectURL(file);
+                  setPreview(url);
+                  return () => URL.revokeObjectURL(url);
+              }
+          }, [file]);
+
+          return (
+              <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+                  <div className="w-16 h-16 shrink-0 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-100">
+                     {file.type.startsWith('image/') ? 
+                        <img src={preview} className="w-full h-full object-cover" /> :
+                        <LucideFileText className="w-8 h-8 text-slate-400"/>
+                     }
+                  </div>
+                  <div className="overflow-hidden">
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wide mb-1">{label}</p>
+                      <p className="text-sm font-semibold text-slate-800 truncate" title={file.name}>{file.name}</p>
+                      <p className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
+                  </div>
+              </div>
+          );
+      };
 
       const FileBadge = ({ label, file, color = 'blue' }) => {
         const bgColor = color === 'green' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-100 text-blue-700 border-blue-200';
@@ -381,6 +431,17 @@
             {icon}
             {label}
         </button>
+      );
+      
+      const LoadingModal = () => (
+          <div className="fixed inset-0 z-[60] bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+              <div className="bg-white/10 p-4 rounded-full mb-6">
+                <LucideLoader className="w-12 h-12 text-white animate-spin" />
+              </div>
+              <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">กำลังบันทึกข้อมูล...</h2>
+              <p className="text-slate-300 text-lg max-w-md">ระบบกำลังอัปโหลดเอกสารและบันทึกข้อมูล กรุณาอย่าปิดหน้าต่างนี้จนกว่าจะเสร็จสิ้น</p>
+              <div className="mt-8 bg-white/10 rounded-full px-6 py-2 text-sm font-mono text-brand-200">Processing Request...</div>
+          </div>
       );
 
       // --- PAGE COMPONENTS ---
@@ -543,6 +604,13 @@
             }
         };
 
+        const handleKeyDownSearch = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleUserSearch(e.target.value);
+            }
+        };
+
         const handleFileChange = (e, fieldName) => {
           if (e.target.files && e.target.files[0]) {
             setFiles(prev => ({ ...prev, [fieldName]: e.target.files[0] }));
@@ -600,6 +668,8 @@
 
         return (
             <div className="max-w-6xl mx-auto">
+                 {loading && <LoadingModal />}
+                 
                  {previewImage && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn" onClick={() => setPreviewImage(null)}>
                         <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
@@ -702,8 +772,10 @@
                                                 value={formData.empId} 
                                                 onChange={handleChange} 
                                                 onBlur={(e) => handleUserSearch(e.target.value)}
+                                                onKeyDown={handleKeyDownSearch}
                                                 rightIcon={isSearching && <LucideLoader className="w-4 h-4 animate-spin text-brand-500"/>}
                                                 required
+                                                helper={<p className="text-xs text-brand-600 mt-1 flex items-center gap-1 font-medium"><LucideSparkles className="w-3 h-3"/> พิมพ์แล้วกด Enter หรือคลิกข้างนอกเพื่อดึงข้อมูลอัตโนมัติ</p>}
                                             />
                                         </div>
                                         <div className="md:col-span-2">
@@ -713,6 +785,7 @@
                                                 value={formData.idCard} 
                                                 onChange={handleChange} 
                                                 onBlur={(e) => handleUserSearch(e.target.value)}
+                                                onKeyDown={handleKeyDownSearch}
                                                 maxLength={13} 
                                                 required 
                                                 placeholder="เลข 13 หลัก"
@@ -747,9 +820,9 @@
                                 <div className="space-y-6">
                                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div className="bg-brand-50 p-2 rounded-lg text-brand-600"><LucideUpload className="w-5 h-5"/></div><h3 className="text-lg font-bold text-slate-700">อัปโหลดเอกสาร</h3></div>
                                     <div className="grid md:grid-cols-3 gap-4">
-                                        <FileInput label="รูปถ่ายหน้าตรง" onChange={(e)=>handleFileChange(e,'photo')} required exampleUrl="https://via.placeholder.com/150" onPreview={setPreviewImage}/>
-                                        <FileInput label="สำเนาบัตรประชาชน" onChange={(e)=>handleFileChange(e,'idCard')} required/>
-                                        <FileInput label="ผลสอบผ่าน (OIC)" onChange={(e)=>handleFileChange(e,'examResult')} required/>
+                                        <FileInput label="รูปถ่ายหน้าตรง" onChange={(e)=>handleFileChange(e,'photo')} required exampleUrl="https://via.placeholder.com/150" onPreview={setPreviewImage} value={files.photo}/>
+                                        <FileInput label="สำเนาบัตรประชาชน" onChange={(e)=>handleFileChange(e,'idCard')} required value={files.idCard}/>
+                                        <FileInput label="ผลสอบผ่าน (OIC)" onChange={(e)=>handleFileChange(e,'examResult')} required value={files.examResult}/>
                                     </div>
                                     {formData.examMode === ExamMode.SELF && (
                                         <div className="mt-8 bg-gradient-to-br from-emerald-50 to-teal-50 p-8 rounded-2xl border border-emerald-100/50 relative overflow-hidden">
@@ -760,9 +833,9 @@
                                                 </label>
                                                 {formData.wantReimbursement && (
                                                     <div className="grid md:grid-cols-3 gap-4 mt-6 animate-fadeIn">
-                                                        <FileInput label="ใบเสร็จ" variant="green" onChange={(e)=>handleFileChange(e,'receipt')} required exampleUrl="https://via.placeholder.com/150" onPreview={setPreviewImage}/>
-                                                        <FileInput label="สำเนาบัตร (เบิก)" variant="green" onChange={(e)=>handleFileChange(e,'idCopyReimburse')} required/>
-                                                        <FileInput label="หน้าสมุดบัญชี" variant="green" onChange={(e)=>handleFileChange(e,'bankBook')} required/>
+                                                        <FileInput label="ใบเสร็จ" variant="green" onChange={(e)=>handleFileChange(e,'receipt')} required exampleUrl="https://via.placeholder.com/150" onPreview={setPreviewImage} value={files.receipt}/>
+                                                        <FileInput label="สำเนาบัตร (เบิก)" variant="green" onChange={(e)=>handleFileChange(e,'idCopyReimburse')} required value={files.idCopyReimburse}/>
+                                                        <FileInput label="หน้าสมุดบัญชี" variant="green" onChange={(e)=>handleFileChange(e,'bankBook')} required value={files.bankBook}/>
                                                     </div>
                                                 )}
                                             </div>
@@ -780,12 +853,24 @@
                                         <ReviewItem label="รหัสพนักงาน" value={formData.empId} />
                                         <ReviewItem label="เบอร์โทร" value={formData.phone} />
                                     </div>
-                                    <div className="flex gap-2 pt-4">
-                                        <FileBadge label="รูปถ่าย" file={files.photo} />
-                                        <FileBadge label="บัตรประชาชน" file={files.idCard} />
-                                        <FileBadge label="ผลสอบ" file={files.examResult} />
-                                        {formData.wantReimbursement && <span className="text-emerald-600 text-xs font-bold flex items-center"><LucideCheckCircle className="w-3 h-3 mr-1"/> ขอเบิกเงิน</span>}
+                                    
+                                    <div className="mt-6">
+                                         <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><LucideImage className="w-4 h-4"/> เอกสารแนบ</h4>
+                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                             <PreviewThumb file={files.photo} label="รูปถ่าย" />
+                                             <PreviewThumb file={files.idCard} label="บัตรประชาชน" />
+                                             <PreviewThumb file={files.examResult} label="ผลสอบ" />
+                                             {formData.wantReimbursement && (
+                                                 <>
+                                                    <PreviewThumb file={files.receipt} label="ใบเสร็จ" />
+                                                    <PreviewThumb file={files.idCopyReimburse} label="สำเนาบัตร (เบิก)" />
+                                                    <PreviewThumb file={files.bankBook} label="หน้าบัญชี" />
+                                                 </>
+                                             )}
+                                         </div>
                                     </div>
+
+                                    {formData.wantReimbursement && <div className="mt-4 pt-4 border-t border-slate-200 text-emerald-600 text-xs font-bold flex items-center"><LucideCheckCircle className="w-3 h-3 mr-1"/> แจ้งความประสงค์ขอเบิกเงินค่าสอบ</div>}
                                 </div>
                             )}
                         </div>
@@ -923,12 +1008,12 @@
 
           const filteredData = () => {
               let res = [...data];
-              if(tab==='life') res = res.filter(r => r.licenseType.includes('Life') && !r.licenseType.includes('Non'));
-              if(tab==='non_life') res = res.filter(r => r.licenseType.includes('Non-Life'));
+              if(tab==='life') res = res.filter(r => r.licenseType && (r.licenseType.includes('Life') || r.licenseType.includes('ชีวิต')) && !(r.licenseType.includes('Non') || r.licenseType.includes('วินาศภัย')));
+              if(tab==='non_life') res = res.filter(r => r.licenseType && (r.licenseType.includes('Non-Life') || r.licenseType.includes('วินาศภัย')));
               if(tab==='batch') {
                   if(selectedBatch !== 'all') res = res.filter(r => r.trainingSessionId === selectedBatch);
                   res = res.filter(r => r.trainingSessionId); 
-                  res.sort((a,b) => a.idCard.localeCompare(b.idCard));
+                  res.sort((a,b) => String(a.idCard || '').localeCompare(String(b.idCard || '')));
               }
               if(tab==='reimburse') res = res.filter(r => r.wantReimbursement);
               return res;
