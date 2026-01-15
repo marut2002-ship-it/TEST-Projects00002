@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -6,21 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ระบบลงทะเบียนอบรมขอรับใบอนุญาตประกัน</title>
     
-    <!-- Libraries -->
+    <!-- Styles -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- React & Babel -->
+    <!-- React Dependencies (UMD) -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+    
+    <!-- Compiler -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Icons & Charts & Utils -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+    <!-- UI Libraries -->
+    <!-- Load Vanilla Lucide UMD Build (Stable Version) -->
+    <script src="https://unpkg.com/lucide@0.292.0/dist/umd/lucide.min.js"></script>
+    <!-- Load Recharts UMD -->
+    <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
+    
+    <!-- Utils -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <script>
       tailwind.config = {
@@ -53,6 +61,10 @@
       @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fadeIn { animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
       .animate-slideUp { animation: slideUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+      .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+      @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+      .perspective-1000 { perspective: 1000px; }
+      
       @media print {
         @page { size: auto; margin: 0mm; }
         body { margin: 1cm; background: white; }
@@ -64,13 +76,13 @@
 <script type="importmap">
 {
   "imports": {
-    "file-saver": "https://esm.sh/file-saver@^2.0.5",
+    "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "recharts": "https://esm.sh/recharts@^3.6.0",
-    "jszip": "https://esm.sh/jszip@^3.10.1"
+    "jszip": "https://esm.sh/jszip@^3.10.1",
+    "file-saver": "https://esm.sh/file-saver@^2.0.5"
   }
 }
 </script>
@@ -79,7 +91,61 @@
     <div id="root"></div>
 
     <script type="text/babel">
-      const { useState, useEffect } = React;
+      // --- GLOBAL IMPORTS & UTILS ---
+      const { useState, useEffect, useRef } = React;
+      const { jsPDF } = window.jspdf;
+
+      // --- LUCIDE ICON ADAPTER (FIXED & ROBUST) ---
+      const lucideMap = {};
+      const lucideRaw = window.lucide;
+
+      if (lucideRaw && lucideRaw.icons) {
+        const renderIconNode = ([tag, attrs, children]) => {
+            return React.createElement(
+                tag,
+                { ...attrs, key: Math.random() },
+                Array.isArray(children) ? children.map(renderIconNode) : null
+            );
+        };
+
+        const createIconComponent = (name, iconNode) => {
+            return ({ color = "currentColor", size = 24, strokeWidth = 2, className, ...props }) => {
+                const iconChildren = iconNode[2]; 
+                return React.createElement(
+                    "svg",
+                    {
+                        ...props,
+                        xmlns: "http://www.w3.org/2000/svg",
+                        width: size,
+                        height: size,
+                        viewBox: "0 0 24 24",
+                        fill: "none",
+                        stroke: color,
+                        strokeWidth: strokeWidth,
+                        strokeLinecap: "round",
+                        strokeLinejoin: "round",
+                        className: `lucide lucide-${name} ${className || ''}`
+                    },
+                    Array.isArray(iconChildren) ? iconChildren.map(renderIconNode) : null
+                );
+            };
+        };
+
+        Object.keys(lucideRaw.icons).forEach(key => {
+            const Comp = createIconComponent(key, lucideRaw.icons[key]);
+            lucideMap[key] = Comp;
+            lucideMap[`Lucide${key}`] = Comp; 
+        });
+      }
+
+      // Proxy to handle undefined icons gracefully
+      const lucide = new Proxy(lucideMap, {
+          get: (target, prop) => {
+              if (prop in target) return target[prop];
+              return ({ size = 24, ...props }) => React.createElement('svg', { width: size, height: size });
+          }
+      });
+
       const { 
         LucideShieldCheck, LucideUser, LucideLayoutDashboard, LucideLogOut, 
         LucideUserPlus, LucideSearch, LucideShield, LucideArrowRight, LucideLock,
@@ -90,86 +156,74 @@
         LucideQrCode, LucideMaximize2, LucideBanknote, LucideClock, LucideTrendingUp,
         LucideFilter, LucideCamera, LucideSave, LucidePrinter, LucideCopy, 
         LucideFileSpreadsheet, LucideImages, LucideCheckSquare, LucideArchive,
-        LucideXCircle, LucideLayoutGrid, LucideEdit
+        LucideXCircle, LucideLayoutGrid, LucideEdit, LucideActivity, LucideRefreshCw,
+        LucideSparkles, LucideImage, LucideDownload
       } = lucide;
 
-      const { 
-        BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, ResponsiveContainer, 
-        PieChart, Pie, Cell 
-      } = Recharts;
+      // --- RECHARTS ADAPTER ---
+      const RechartsLib = window.Recharts || {};
+      const safeRecharts = (name) => RechartsLib[name] || (({children}) => children || null);
+      const BarChart = safeRecharts('BarChart');
+      const Bar = safeRecharts('Bar');
+      const XAxis = safeRecharts('XAxis');
+      const YAxis = safeRecharts('YAxis');
+      const CartesianGrid = safeRecharts('CartesianGrid');
+      const RechartsTooltip = safeRecharts('Tooltip');
+      const ResponsiveContainer = RechartsLib.ResponsiveContainer || (({children}) => <div style={{width:'100%', height:'100%'}}>{children}</div>);
+      const PieChart = safeRecharts('PieChart');
+      const Pie = safeRecharts('Pie');
+      const Cell = safeRecharts('Cell');
 
-      // --- TYPES ---
-      const LicenseType = {
-        LIFE: 'Life Insurance (นช)',
-        NON_LIFE: 'Non-Life Insurance (นว)'
-      };
-      const ExamMode = {
-        SELF: 'Self-Passed (สอบเอง)',
-        COMPANY: 'Company-Passed (สอบกับบริษัท)'
-      };
-      const RegistrationStatus = {
-        PENDING: 'PENDING',
-        APPROVED: 'APPROVED',
-        REJECTED: 'REJECTED'
-      };
-      const BatchStatus = {
-        NOT_JOINED_LINE: 'ยังไม่เข้าห้องไลน์',
-        JOINED_LINE: 'เข้าห้องไลน์',
-        MORNING_SESSION: 'รอบเช้า',
-        AFTERNOON_SESSION: 'รอบบ่าย',
-        COMPLETED: 'สมบูรณ์',
-        WAIVED: 'สละสิทธิ์'
-      };
-      const ReimbursementStatus = {
-        PENDING: 'รอเบิกจ่าย',
-        PROCESSED: 'เบิกจ่ายแล้ว'
-      };
+      // --- CONFIGURATION ---
+      // IMPORTANT: Replace this with your own Google Apps Script Web App URL
+      const API_URL = "https://script.google.com/macros/s/AKfycbxQ0b5oPHnR_J5_fPOcUtGihmq-pjdQ3Fhy_KZwTLPvHi4LUwGWQn8aIU4yydJFWdeGnw/exec";
 
-      // --- API ADAPTER (Google Script) ---
-      const GAS_API = {
-        run: (funcName, ...args) => {
-          return new Promise((resolve, reject) => {
-            if (!window.google) {
-              // Dev environment / No GAS
-              console.warn(`Calling GAS Function: ${funcName} (Mocked)`);
-              // Mock simple return for critical functions to prevent crash in dev
-              if(funcName === 'getSessions') resolve([]);
-              if(funcName === 'getStats') resolve({total:0, pending:0, approved:0, rejected:0, byType:[], recentRegistrations:[], sessions:[]});
-              if(funcName === 'getAllRegistrations') resolve([]);
-              return;
-            }
-            google.script.run
-              .withSuccessHandler(resolve)
-              .withFailureHandler(reject)
-              [funcName](...args);
-          });
-        }
-      };
+      // --- TYPES & ENUMS ---
+      const LicenseType = { LIFE: 'ประกันชีวิต (นช)', NON_LIFE: 'ประกันวินาศภัย (นว)' };
+      const ExamMode = { SELF: 'Self-Passed (สอบเอง)', COMPANY: 'Company-Passed (สอบกับบริษัท)' };
+      const RegistrationStatus = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED' };
+      const BatchStatus = { NOT_JOINED_LINE: 'ยังไม่เข้าห้องไลน์', JOINED_LINE: 'เข้าห้องไลน์', MORNING_SESSION: 'รอบเช้า', AFTERNOON_SESSION: 'รอบบ่าย', COMPLETED: 'สมบูรณ์', WAIVED: 'สละสิทธิ์' };
+      const ReimbursementStatus = { PENDING: 'รอเบิกจ่าย', PROCESSED: 'เบิกจ่ายแล้ว' };
 
-      // Helper: Convert File to Base64
-      const fileToBase64 = (file) => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => {
-             // Extract just the base64 part, remove "data:image/png;base64," prefix for GAS
-             const result = reader.result;
-             const base64 = result.split(',')[1];
-             resolve({
-               name: file.name,
-               mimeType: file.type,
-               data: base64
-             });
-          };
-          reader.onerror = error => reject(error);
-        });
-      };
-
+      // --- API ADAPTER (REAL FETCH) ---
       const api = {
-        getSessions: (type) => GAS_API.run('getSessions', type),
-        getAllSessions: () => GAS_API.run('getAllSessions'),
+        _get: async (action, params = '') => {
+          const url = `${API_URL}?action=${action}${params}`;
+          try {
+            const response = await fetch(url);
+            const json = await response.json();
+            if(!json.success) throw new Error(json.error || 'API Error');
+            return json.data;
+          } catch (e) {
+            console.error(`API Error [${action}]:`, e);
+            throw new Error(`Connection Error: ${e.message}`);
+          }
+        },
+        _post: async (action, data) => {
+          try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action, ...data }),
+            });
+            const json = await response.json();
+            if(!json.success) throw new Error(json.error || 'API Error');
+            return json.data;
+          } catch (e) {
+             console.error(`API Error [${action}]:`, e);
+             throw new Error(`Submission Error: ${e.message}`);
+          }
+        },
+        
+        getSessions: async (type) => api._get('getSessions', `&type=${encodeURIComponent(type)}`),
+        getAllSessions: async () => api._get('getAllSessions'),
+        searchRegistration: async (query) => api._get('searchRegistration', `&query=${encodeURIComponent(query)}`),
+        getAllRegistrations: async () => api._get('getAllRegistrations'),
+        getStats: async () => api._get('getStats'),
+        // New: getUserFromDB accepts a query (EmpID or ID Card)
+        getUserFromDB: async (query) => api._get('getUserFromDB', `&query=${encodeURIComponent(query)}`),
+        getImagesForPdf: async (id) => api._get('getImagesForPdf', `&id=${encodeURIComponent(id)}`),
+        
         submitRegistration: async (data) => {
-           // Process files before sending
            const processedFiles = {};
            if(data.photoFile) processedFiles.photo = await fileToBase64(data.photoFile);
            if(data.idCardFile) processedFiles.idCard = await fileToBase64(data.idCardFile);
@@ -179,26 +233,225 @@
            if(data.idCopyReimburseFile) processedFiles.idCopyReimburse = await fileToBase64(data.idCopyReimburseFile);
 
            const payload = { ...data, files: processedFiles };
-           // Remove raw File objects to avoid serialization error
            delete payload.photoFile; delete payload.idCardFile; delete payload.examResultFile;
            delete payload.receiptFile; delete payload.bankBookFile; delete payload.idCopyReimburseFile;
            
-           return GAS_API.run('submitRegistration', payload);
+           return api._post('submitRegistration', payload);
         },
-        searchRegistration: (query) => GAS_API.run('searchRegistration', query),
-        getAllRegistrations: () => GAS_API.run('getAllRegistrations'),
-        updateStatus: (id, status) => GAS_API.run('updateStatus', id, status),
-        updateBatchStatus: (id, status) => GAS_API.run('updateBatchStatus', id, status),
-        updateReimbursementStatus: (id, status) => GAS_API.run('updateReimbursementStatus', id, status),
-        updateRegistrationDetails: (id, data) => GAS_API.run('updateRegistrationDetails', id, data),
-        getStats: () => GAS_API.run('getStats'),
+        updateStatus: (id, status) => api._post('updateStatus', { id, status }),
+        updateBatchStatus: (id, status) => api._post('updateBatchStatus', { id, status }),
+        updateReimbursementStatus: (id, status) => api._post('updateReimbursementStatus', { id, status }),
+        updateRegistrationDetails: (id, data) => api._post('updateRegistrationDetails', { id, data }),
       };
 
-      // --- COMPONENTS ---
+      const fileToBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => {
+             const result = reader.result;
+             const base64 = result.split(',')[1];
+             resolve({ name: file.name, mimeType: file.type, data: base64 });
+          };
+          reader.onerror = error => reject(error);
+        });
+      };
 
-      // 1. Layout
+      // --- REUSABLE COMPONENTS ---
+      const InputField = ({ label, required, rightIcon, helper, ...props }) => (
+        <div className="group relative">
+            <label className="block text-sm font-semibold text-slate-700 mb-2 transition-colors group-focus-within:text-brand-600">
+                {label} {required && <span className="text-red-500">*</span>}
+            </label>
+            <div className="relative">
+                <input 
+                    {...props}
+                    required={required}
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all outline-none text-slate-700 placeholder-slate-400 font-medium hover:border-slate-300 shadow-sm disabled:bg-slate-100 disabled:text-slate-400"
+                />
+                {rightIcon && <div className="absolute right-4 top-1/2 -translate-y-1/2">{rightIcon}</div>}
+            </div>
+            {helper && <div className="mt-1">{helper}</div>}
+        </div>
+      );
+
+      const RadioGroup = ({ label, name, value, options, onChange }) => (
+        <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-3">{label}</label>
+            <div className="grid gap-3">
+                {options.map((opt) => (
+                    <label key={opt.value} className={`relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${value === opt.value ? 'border-brand-500 bg-brand-50/50 shadow-sm ring-1 ring-brand-500/20' : 'border-slate-100 bg-white hover:border-brand-200 hover:bg-slate-50'}`}>
+                        <input type="radio" name={name} value={opt.value} checked={value === opt.value} onChange={onChange} className="sr-only" />
+                        <div className={`w-5 h-5 rounded-full border-2 mr-4 flex items-center justify-center transition-colors ${value === opt.value ? 'border-brand-500 bg-brand-500' : 'border-slate-300'}`}>
+                            {value === opt.value && <div className="w-2 h-2 bg-white rounded-full" />}
+                        </div>
+                        <div>
+                            <span className={`block font-bold text-sm ${value === opt.value ? 'text-brand-900' : 'text-slate-700'}`}>{opt.label}</span>
+                            <span className="text-xs text-slate-500">{opt.desc}</span>
+                        </div>
+                        {value === opt.value && <LucideCheck className="absolute right-4 text-brand-500 w-5 h-5 opacity-20" />}
+                    </label>
+                ))}
+            </div>
+        </div>
+      );
+
+      const FileInput = ({ label, subLabel, required, onChange, variant = 'blue', exampleUrl, onPreview, value }) => {
+        const isGreen = variant === 'green';
+        const borderColor = isGreen ? 'hover:border-emerald-400' : 'hover:border-brand-400';
+        const iconColor = isGreen ? 'text-emerald-500' : 'text-brand-500';
+        const bgHover = isGreen ? 'group-hover:bg-emerald-50' : 'group-hover:bg-brand-50';
+
+        if (value) {
+            return (
+                <div className={`relative border-2 border-solid ${isGreen ? 'border-emerald-400 bg-emerald-50' : 'border-brand-400 bg-brand-50'} rounded-2xl p-6 text-center animate-fadeIn`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-white ${isGreen ? 'text-emerald-500' : 'text-brand-500'} shadow-sm`}>
+                        <LucideCheckCircle className="w-6 h-6" />
+                    </div>
+                    <label className={`block text-sm font-bold ${isGreen ? 'text-emerald-800' : 'text-brand-800'} mb-1`}>
+                         แนบไฟล์เรียบร้อย
+                    </label>
+                    <p className={`text-xs ${isGreen ? 'text-emerald-600' : 'text-brand-600'} mb-3 truncate px-4`}>{value.name}</p>
+                    <div className="relative inline-block">
+                        <button type="button" className={`text-xs font-bold px-4 py-2 rounded-full border ${isGreen ? 'border-emerald-200 text-emerald-600 bg-white hover:bg-emerald-100' : 'border-brand-200 text-brand-600 bg-white hover:bg-brand-100'} transition-colors`}>
+                            เปลี่ยนไฟล์
+                        </button>
+                        <input type="file" onChange={onChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                    </div>
+                </div>
+            )
+        }
+
+        return (
+            <div className={`group relative border-2 border-dashed border-slate-300 rounded-2xl p-6 transition-all cursor-pointer text-center bg-white ${borderColor} hover:shadow-sm`}>
+                {exampleUrl && (
+                    <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPreview(exampleUrl); }}
+                        className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm text-[11px] font-bold text-brand-600 rounded-full shadow-sm border border-brand-100 hover:bg-brand-50 transition-all hover:scale-105"
+                    >
+                        <LucideEye className="w-3.5 h-3.5" /> ตัวอย่าง
+                    </button>
+                )}
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-slate-50 ${bgHover} transition-colors`}>
+                    <LucideUpload className={`w-6 h-6 text-slate-400 group-hover:${iconColor} transition-colors`} />
+                </div>
+                <label className="block text-sm font-bold text-slate-700 mb-1 pointer-events-none group-hover:text-slate-900">
+                {label} {required && <span className="text-red-500">*</span>}
+                </label>
+                {subLabel && <p className="text-xs text-slate-400 mb-2">{subLabel}</p>}
+                <div className="mt-2">
+                    <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-slate-100 text-slate-500 ${bgHover} group-hover:${iconColor} transition-colors`}>Browse File</span>
+                </div>
+                <input type="file" onChange={onChange} required={required} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            </div>
+        );
+      };
+
+      const ReviewItem = ({ label, value }) => (
+        <div className="flex flex-col">
+            <span className="text-xs text-slate-400 font-medium mb-0.5">{label}</span>
+            <span className="text-slate-800 font-semibold">{value || '-'}</span>
+        </div>
+      );
+      
+      const PreviewThumb = ({ file, label }) => {
+          if (!file) return null;
+          const [preview, setPreview] = useState(null);
+          useEffect(() => {
+              if (file) {
+                  const url = URL.createObjectURL(file);
+                  setPreview(url);
+                  return () => URL.revokeObjectURL(url);
+              }
+          }, [file]);
+
+          return (
+              <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl">
+                  <div className="w-16 h-16 shrink-0 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-100">
+                     {file.type.startsWith('image/') ? 
+                        <img src={preview} className="w-full h-full object-cover" /> :
+                        <LucideFileText className="w-8 h-8 text-slate-400"/>
+                     }
+                  </div>
+                  <div className="overflow-hidden">
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wide mb-1">{label}</p>
+                      <p className="text-sm font-semibold text-slate-800 truncate" title={file.name}>{file.name}</p>
+                      <p className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</p>
+                  </div>
+              </div>
+          );
+      };
+
+      const FileBadge = ({ label, file, color = 'blue' }) => {
+        const bgColor = color === 'green' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-100 text-blue-700 border-blue-200';
+        return (
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold ${file ? bgColor : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                {file ? <LucideCheckCircle className="w-3 h-3" /> : <LucideX className="w-3 h-3" />}
+                {label}
+            </div>
+        );
+      };
+
+      const StatusBadge = ({ status }) => {
+        let styleClass = "";
+        if (status === RegistrationStatus.APPROVED) styleClass = "bg-green-100 text-green-700 ring-green-600/20";
+        else if (status === RegistrationStatus.REJECTED) styleClass = "bg-red-100 text-red-700 ring-red-600/20";
+        else styleClass = "bg-amber-100 text-amber-700 ring-amber-600/20";
+        return <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-bold ring-1 ring-inset ${styleClass}`}>{status}</span>;
+      };
+
+      const StatCard = ({ title, value, icon, color, bg, trend }) => (
+        <div className="bg-white p-6 rounded-3xl shadow-soft border border-slate-100 hover:shadow-lg transition-all duration-300 group">
+            <div className="flex justify-between items-start mb-4">
+                <div className={`p-3.5 rounded-2xl ${bg} ${color}`}>
+                    {icon}
+                </div>
+                {trend && <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full"><LucideTrendingUp className="w-3 h-3" /> {trend}</span>}
+            </div>
+            <div>
+            <p className="text-3xl font-extrabold text-slate-800 tracking-tight group-hover:scale-105 transition-transform origin-left">{value}</p>
+            <p className="text-slate-400 text-sm font-semibold mt-1">{title}</p>
+            </div>
+        </div>
+      );
+
+      const InfoItem = ({ icon, label, value }) => (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50/50 border border-slate-100 h-full">
+            <div className="text-slate-400 shrink-0">{icon}</div>
+            <div className="overflow-hidden">
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wide truncate">{label}</p>
+                <p className="text-sm font-semibold text-slate-700 truncate">{value}</p>
+            </div>
+        </div>
+      );
+
+      const TabButton = ({ active, onClick, icon, label }) => (
+        <button 
+            onClick={onClick}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap
+                ${active ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'}
+            `}
+        >
+            {icon}
+            {label}
+        </button>
+      );
+      
+      const LoadingModal = () => (
+          <div className="fixed inset-0 z-[60] bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+              <div className="bg-white/10 p-4 rounded-full mb-6">
+                <LucideLoader className="w-12 h-12 text-white animate-spin" />
+              </div>
+              <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">กำลังบันทึกข้อมูล...</h2>
+              <p className="text-slate-300 text-lg max-w-md">ระบบกำลังอัปโหลดเอกสารและบันทึกข้อมูล กรุณาอย่าปิดหน้าต่างนี้จนกว่าจะเสร็จสิ้น</p>
+              <div className="mt-8 bg-white/10 rounded-full px-6 py-2 text-sm font-mono text-brand-200">Processing Request...</div>
+          </div>
+      );
+
+      // --- PAGE COMPONENTS ---
+
       const Layout = ({ children, activeView, onChangeView, isAdminLoggedIn, onLogout }) => {
-        // Create icons using lucide.createIcons logic (React version renders components directly)
         return (
           <div className="min-h-screen relative flex flex-col overflow-hidden">
             <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 bg-slate-50/50">
@@ -266,15 +519,21 @@
         );
       };
 
-      // 2. RegistrationForm
       const RegistrationForm = () => {
         const [currentStep, setCurrentStep] = useState(1);
         const [loading, setLoading] = useState(false);
         const [success, setSuccess] = useState(false);
         const [error, setError] = useState(null);
         const [previewImage, setPreviewImage] = useState(null);
+        
+        // Auto-fill state
+        const [isSearching, setIsSearching] = useState(false);
+        const [searchError, setSearchError] = useState(null);
+
+        // Session State
         const [sessions, setSessions] = useState([]);
         const [loadingSessions, setLoadingSessions] = useState(false);
+        const [sessionError, setSessionError] = useState(null);
 
         const [formData, setFormData] = useState({
           licenseType: LicenseType.LIFE,
@@ -287,15 +546,22 @@
 
         const [files, setFiles] = useState({ photo: null, idCard: null, examResult: null, receipt: null, bankBook: null, idCopyReimburse: null });
 
+        const fetchSessions = async () => {
+            if (!formData.licenseType) return;
+            setLoadingSessions(true);
+            setSessionError(null);
+            try {
+                const data = await api.getSessions(formData.licenseType);
+                setSessions(data);
+            } catch (e) { 
+                console.error(e); 
+                setSessionError(e.message || "ไม่สามารถดึงข้อมูลได้");
+            } finally { 
+                setLoadingSessions(false); 
+            }
+        };
+
         useEffect(() => {
-          const fetchSessions = async () => {
-              if (!formData.licenseType) return;
-              setLoadingSessions(true);
-              try {
-                  const data = await api.getSessions(formData.licenseType);
-                  setSessions(data);
-              } catch (e) { console.error(e); } finally { setLoadingSessions(false); }
-          };
           fetchSessions();
         }, [formData.licenseType]);
 
@@ -308,6 +574,46 @@
             setFormData(prev => ({
                 ...prev, trainingSessionId: session.id, trainingDate: session.date, trainingBatch: session.batchName
             }));
+        };
+        
+        // Auto-fill Logic
+        const handleUserSearch = async (val) => {
+            if (!val || val.length < 3) return;
+            setIsSearching(true);
+            setSearchError(null);
+            try {
+                const res = await api.getUserFromDB(val);
+                if (res.found) {
+                    setFormData(prev => ({
+                        ...prev,
+                        empId: res.empId || prev.empId,
+                        idCard: res.idCard || prev.idCard,
+                        prefix: res.prefix || prev.prefix,
+                        firstName: res.firstName || prev.firstName,
+                        lastName: res.lastName || prev.lastName,
+                        position: res.position || prev.position,
+                        branch: res.branch || prev.branch,
+                        zone: res.zone || prev.zone,
+                        region: res.region || prev.region,
+                        dob: res.dob || prev.dob
+                    }));
+                } else {
+                    // Optional: Notify user not found, or just do nothing
+                    // console.log('User not found in DB');
+                }
+            } catch (e) {
+                console.error("Auto-fill error:", e);
+                setSearchError("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
+            } finally {
+                setIsSearching(false);
+            }
+        };
+
+        const handleKeyDownSearch = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleUserSearch(e.target.value);
+            }
         };
 
         const handleFileChange = (e, fieldName) => {
@@ -336,14 +642,13 @@
             setSuccess(true);
             window.scrollTo(0, 0);
           } catch (err) {
-            setError(err.message || "เกิดข้อผิดพลาดในการส่งข้อมูล");
+            setError(err.message || "เกิดข้อผิดพลาดในการส่งข้อมูล: " + err.message);
           } finally { setLoading(false); }
         };
 
         const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 6));
         const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
         
-        // Render Steps components (Compact for single file)
         const STEPS = [
           { id: 1, title: 'หลักสูตร', icon: LucideFileText },
           { id: 2, title: 'เลือกรุ่น', icon: LucideCalendar },
@@ -357,21 +662,31 @@
             return (
               <div className="max-w-xl mx-auto text-center py-20 bg-white rounded-3xl shadow-soft p-10 animate-slideUp border border-slate-100">
                 <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-                    <LucideCheckCircle className="w-12 h-12 text-green-500" />
+                    <LucideCheckCircle className="w-12 h-12 text-green-500 drop-shadow-sm" />
                 </div>
                 <h2 className="text-3xl font-bold text-slate-800 mb-3">ลงทะเบียนสำเร็จ!</h2>
-                <p className="text-slate-500 mb-8">ข้อมูลถูกส่งเข้าระบบเรียบร้อยแล้ว รอการอนุมัติ 1-2 วันทำการ</p>
-                <button onClick={() => window.location.reload()} className="bg-brand-600 text-white px-8 py-3.5 rounded-xl font-bold">ลงทะเบียนท่านอื่นต่อ</button>
+                <p className="text-slate-500 mb-8 leading-relaxed">ข้อมูลถูกส่งเข้าระบบเรียบร้อยแล้ว <br/>เจ้าหน้าที่จะทำการตรวจสอบและอนุมัติภายใน 1-2 วันทำการ</p>
+                <button onClick={() => window.location.reload()} className="bg-brand-600 text-white px-8 py-3.5 rounded-xl font-bold hover:bg-brand-700 transition-all shadow-lg">ลงทะเบียนท่านอื่นต่อ</button>
               </div>
             );
         }
 
         return (
             <div className="max-w-6xl mx-auto">
-                {/* Stepper UI ... */}
+                 {loading && <LoadingModal />}
+                 
+                 {previewImage && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn" onClick={() => setPreviewImage(null)}>
+                        <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
+                            <div className="p-4 border-b flex justify-between items-center"><h3 className="font-bold flex items-center gap-2"><LucideEye className="w-5 h-5 text-brand-500"/> ตัวอย่าง</h3><button onClick={() => setPreviewImage(null)}><LucideX/></button></div>
+                            <div className="p-6 flex justify-center"><img src={previewImage} className="max-h-[60vh] object-contain rounded"/></div>
+                        </div>
+                    </div>
+                )}
+                 
                  <div className="flex justify-between items-start relative z-0 max-w-5xl mx-auto px-4 overflow-x-auto pb-4 hide-scrollbar mb-10">
                     <div className="absolute top-[22px] left-0 w-full h-[2px] bg-slate-100 -z-10 rounded-full mx-4 min-w-[600px]">
-                         <div className="h-full bg-brand-500 transition-all duration-700 ease-in-out rounded-full" style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}></div>
+                         <div className="h-full bg-brand-500 transition-all duration-700 ease-in-out rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}></div>
                     </div>
                     <div className="flex justify-between w-full min-w-[600px]">
                         {STEPS.map((step) => {
@@ -380,7 +695,7 @@
                             const isCurrent = currentStep === step.id;
                             return (
                                 <div key={step.id} className="flex flex-col items-center group cursor-default">
-                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all border-[3px] shadow-sm z-10 ${isActive ? 'bg-brand-600 border-white text-white scale-110' : 'bg-white border-slate-100 text-slate-300'}`}>
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 border-[3px] shadow-sm z-10 ${isActive ? 'bg-brand-600 border-white text-white shadow-brand-500/30 scale-110' : 'bg-white border-slate-100 text-slate-300'} ${isCurrent ? 'ring-4 ring-brand-100' : ''}`}>
                                         <Icon className="w-5 h-5" />
                                     </div>
                                     <p className={`text-sm font-bold mt-3 ${isActive ? 'text-slate-800' : 'text-slate-400'}`}>{step.title}</p>
@@ -393,128 +708,184 @@
                 <div className="bg-white rounded-[2rem] shadow-soft overflow-hidden border border-slate-100 relative">
                   <form onSubmit={handleSubmit}>
                     <div className="p-8 lg:p-12 min-h-[450px]">
-                        {error && <div className="mb-8 bg-red-50 border border-red-100 p-4 rounded-2xl text-red-700 flex gap-2"><LucideAlertCircle /> {error}</div>}
+                        {error && <div className="mb-8 bg-red-50 border border-red-100 p-4 rounded-2xl text-red-700 flex gap-2 animate-shake"><LucideAlertCircle /> {error}</div>}
                         
-                        {/* Steps Content */}
                         <div className="max-w-4xl mx-auto animate-slideUp">
                             {currentStep === 1 && (
                                 <div className="space-y-8">
-                                    <h3 className="text-xl font-bold">เลือกประเภทการอบรม</h3>
-                                    <div className="grid md:grid-cols-2 gap-8">
-                                        {[ {v: LicenseType.LIFE, l: 'ประกันชีวิต'}, {v: LicenseType.NON_LIFE, l: 'วินาศภัย'} ].map(opt => (
-                                            <label key={opt.v} className={`p-6 border-2 rounded-xl cursor-pointer ${formData.licenseType === opt.v ? 'border-brand-500 bg-brand-50' : 'border-slate-100'}`}>
-                                                <input type="radio" name="licenseType" value={opt.v} checked={formData.licenseType === opt.v} onChange={handleChange} className="sr-only"/>
-                                                <span className="font-bold block text-lg">{opt.l}</span>
-                                            </label>
-                                        ))}
+                                    <div className="text-center mb-8">
+                                        <h3 className="text-xl font-bold text-slate-800">เลือกประเภทการอบรม</h3>
+                                        <p className="text-slate-500 text-sm mt-1">กรุณาเลือกประเภทใบอนุญาตและรูปแบบการสอบ</p>
                                     </div>
-                                    <h3 className="text-xl font-bold pt-4">รูปแบบการสอบ</h3>
                                     <div className="grid md:grid-cols-2 gap-8">
-                                         {[ {v: ExamMode.SELF, l: 'สอบเอง (Self)'}, {v: ExamMode.COMPANY, l: 'สอบกับบริษัท'} ].map(opt => (
-                                            <label key={opt.v} className={`p-6 border-2 rounded-xl cursor-pointer ${formData.examMode === opt.v ? 'border-brand-500 bg-brand-50' : 'border-slate-100'}`}>
-                                                <input type="radio" name="examMode" value={opt.v} checked={formData.examMode === opt.v} onChange={handleChange} className="sr-only"/>
-                                                <span className="font-bold block text-lg">{opt.l}</span>
-                                            </label>
-                                        ))}
+                                        <RadioGroup label="ประเภทใบอนุญาต" name="licenseType" value={formData.licenseType} options={[{ value: LicenseType.LIFE, label: 'ประกันชีวิต (Life)', desc: 'สำหรับตัวแทนประกันชีวิต' }, { value: LicenseType.NON_LIFE, label: 'วินาศภัย (Non-Life)', desc: 'สำหรับตัวแทนประกันวินาศภัย' }]} onChange={handleChange} />
+                                        <RadioGroup label="รูปแบบการสอบ" name="examMode" value={formData.examMode} options={[{ value: ExamMode.SELF, label: 'สอบเอง (Self)', desc: 'สอบผ่านสนามสอบด้วยตนเอง' }, { value: ExamMode.COMPANY, label: 'สอบกับบริษัท (Company)', desc: 'สอบผ่านโควต้าบริษัท' }]} onChange={handleChange} />
                                     </div>
                                 </div>
                             )}
 
                             {currentStep === 2 && (
                                 <div className="space-y-6">
-                                    <h3 className="text-xl font-bold">เลือกรุ่นอบรม</h3>
-                                    {loadingSessions ? <div className="text-center p-10"><LucideLoader className="animate-spin mx-auto"/> Loading...</div> : 
-                                     sessions.length === 0 ? <p className="text-center p-10 text-slate-400">ไม่พบรุ่นอบรม</p> :
+                                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div className="bg-brand-50 p-2 rounded-lg text-brand-600"><LucideCalendar className="w-5 h-5"/></div><h3 className="text-lg font-bold text-slate-700">เลือกรุ่นอบรม</h3></div>
+                                    
+                                    {loadingSessions ? (
+                                        <div className="text-center p-10"><LucideLoader className="animate-spin mx-auto text-brand-500"/> <span className="text-slate-500 mt-2 block">กำลังโหลดข้อมูล...</span></div>
+                                    ) : sessionError ? (
+                                        <div className="text-center p-10 bg-red-50 rounded-2xl border border-red-100">
+                                            <LucideAlertCircle className="w-10 h-10 text-red-500 mx-auto mb-2"/>
+                                            <p className="text-red-700 font-bold">ไม่สามารถโหลดข้อมูลได้</p>
+                                            <p className="text-red-500 text-sm">{sessionError}</p>
+                                            <button type="button" onClick={fetchSessions} className="mt-4 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 font-bold text-sm">ลองใหม่อีกครั้ง</button>
+                                        </div>
+                                    ) : sessions.length === 0 ? (
+                                        <div className="text-center p-10 bg-slate-50 rounded-2xl border border-dashed border-slate-300">
+                                            <p className="text-slate-500">ไม่พบรุ่นอบรมสำหรับประเภทนี้</p>
+                                            <button type="button" onClick={fetchSessions} className="mt-4 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 font-bold text-sm">รีเฟรชข้อมูล</button>
+                                        </div>
+                                    ) : (
                                      <div className="grid md:grid-cols-2 gap-4">
                                         {sessions.map(s => {
                                             const isFull = s.currentSeats >= s.maxSeats;
                                             const selected = formData.trainingSessionId === s.id;
+                                            const percent = (s.currentSeats / s.maxSeats) * 100;
                                             return (
-                                                <div key={s.id} onClick={() => !isFull && handleSessionSelect(s)} className={`p-6 rounded-2xl border-2 cursor-pointer ${isFull ? 'opacity-60 bg-slate-50' : selected ? 'border-brand-500 bg-brand-50' : 'border-slate-100 hover:border-brand-200'}`}>
-                                                    <div className="flex justify-between">
+                                                <div key={s.id} onClick={() => !isFull && handleSessionSelect(s)} className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${isFull ? 'opacity-60 bg-slate-50 cursor-not-allowed' : selected ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500' : 'border-slate-100 hover:border-brand-200'}`}>
+                                                    <div className="flex justify-between mb-2">
                                                         <h4 className="font-bold">{s.batchName}</h4>
                                                         {selected && <LucideCheck className="text-brand-600"/>}
                                                     </div>
-                                                    <p className="text-sm text-slate-500">{new Date(s.date).toLocaleDateString('th-TH')}</p>
-                                                    <div className="mt-2 text-xs font-bold text-brand-600">{isFull ? 'เต็ม' : `ว่าง ${s.maxSeats - s.currentSeats} ที่นั่ง`}</div>
+                                                    <p className="text-sm text-slate-500 mb-2">{new Date(s.date).toLocaleDateString('th-TH')}</p>
+                                                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2"><div className={`h-full ${isFull?'bg-red-400':'bg-brand-500'}`} style={{width: `${percent}%`}}></div></div>
+                                                    <div className="text-xs font-bold text-brand-600">{isFull ? 'เต็ม' : `ว่าง ${s.maxSeats - s.currentSeats} ที่นั่ง`}</div>
                                                 </div>
                                             )
                                         })}
                                      </div>
-                                    }
+                                    )}
                                 </div>
                             )}
 
                             {currentStep === 3 && (
-                                <div className="grid md:grid-cols-2 gap-6">
-                                    <div className="md:col-span-2"><label className="font-bold text-sm">เลขบัตรประชาชน</label><input className="w-full p-3 bg-slate-50 border rounded-xl" name="idCard" value={formData.idCard} onChange={handleChange} maxLength={13} required/></div>
-                                    <div><label className="font-bold text-sm">รหัสพนักงาน</label><input className="w-full p-3 bg-slate-50 border rounded-xl" name="empId" value={formData.empId} onChange={handleChange} required/></div>
-                                    <div>
-                                        <label className="font-bold text-sm">คำนำหน้า</label>
-                                        <select className="w-full p-3 bg-slate-50 border rounded-xl" name="prefix" value={formData.prefix} onChange={handleChange}><option>นาย</option><option>นาง</option><option>นางสาว</option></select>
+                                <div className="space-y-6">
+                                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div className="bg-brand-50 p-2 rounded-lg text-brand-600"><LucideUser className="w-5 h-5"/></div><h3 className="text-lg font-bold text-slate-700">ข้อมูลส่วนตัว</h3></div>
+                                     {searchError && <p className="text-red-500 text-sm bg-red-50 p-2 rounded">{searchError}</p>}
+                                    <div className="grid md:grid-cols-2 gap-6">
+                                        <div className="md:col-span-2">
+                                            <InputField 
+                                                label="รหัสพนักงาน" 
+                                                name="empId" 
+                                                value={formData.empId} 
+                                                onChange={handleChange} 
+                                                onBlur={(e) => handleUserSearch(e.target.value)}
+                                                onKeyDown={handleKeyDownSearch}
+                                                rightIcon={isSearching && <LucideLoader className="w-4 h-4 animate-spin text-brand-500"/>}
+                                                required
+                                                helper={<p className="text-xs text-brand-600 mt-1 flex items-center gap-1 font-medium"><LucideSparkles className="w-3 h-3"/> พิมพ์แล้วกด Enter หรือคลิกข้างนอกเพื่อดึงข้อมูลอัตโนมัติ</p>}
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <InputField 
+                                                label="เลขบัตรประชาชน" 
+                                                name="idCard" 
+                                                value={formData.idCard} 
+                                                onChange={handleChange} 
+                                                onBlur={(e) => handleUserSearch(e.target.value)}
+                                                onKeyDown={handleKeyDownSearch}
+                                                maxLength={13} 
+                                                required 
+                                                placeholder="เลข 13 หลัก"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="font-bold text-sm text-slate-700">คำนำหน้า <span className="text-red-500">*</span></label>
+                                            <select className="w-full p-3.5 bg-slate-50 border rounded-xl mt-2 outline-none" name="prefix" value={formData.prefix} onChange={handleChange}><option>นาย</option><option>นาง</option><option>นางสาว</option></select>
+                                        </div>
+                                        <div><InputField label="ชื่อจริง" name="firstName" value={formData.firstName} onChange={handleChange} required/></div>
+                                        <div><InputField label="นามสกุล" name="lastName" value={formData.lastName} onChange={handleChange} required/></div>
+                                        <div><InputField label="วันเกิด" type="date" name="dob" value={formData.dob} onChange={handleChange} required/></div>
+                                        <div><InputField label="เบอร์โทรศัพท์" name="phone" value={formData.phone} onChange={handleChange} required/></div>
+                                        <div className="md:col-span-2"><InputField label="อีเมล" type="email" name="email" value={formData.email} onChange={handleChange} required/></div>
                                     </div>
-                                    <div><label className="font-bold text-sm">ชื่อจริง</label><input className="w-full p-3 bg-slate-50 border rounded-xl" name="firstName" value={formData.firstName} onChange={handleChange} required/></div>
-                                    <div><label className="font-bold text-sm">นามสกุล</label><input className="w-full p-3 bg-slate-50 border rounded-xl" name="lastName" value={formData.lastName} onChange={handleChange} required/></div>
-                                    <div><label className="font-bold text-sm">วันเกิด</label><input type="date" className="w-full p-3 bg-slate-50 border rounded-xl" name="dob" value={formData.dob} onChange={handleChange}/></div>
-                                    <div><label className="font-bold text-sm">เบอร์โทรศัพท์</label><input className="w-full p-3 bg-slate-50 border rounded-xl" name="phone" value={formData.phone} onChange={handleChange} required/></div>
-                                    <div className="md:col-span-2"><label className="font-bold text-sm">อีเมล</label><input type="email" className="w-full p-3 bg-slate-50 border rounded-xl" name="email" value={formData.email} onChange={handleChange}/></div>
                                 </div>
                             )}
 
                             {currentStep === 4 && (
-                                <div className="grid md:grid-cols-2 gap-6">
-                                    <input placeholder="ตำแหน่ง" className="w-full p-3 bg-slate-50 border rounded-xl" name="position" value={formData.position} onChange={handleChange}/>
-                                    <input placeholder="สาขา / แผนก" className="w-full p-3 bg-slate-50 border rounded-xl" name="branch" value={formData.branch} onChange={handleChange}/>
-                                    <input placeholder="เขต / ฝ่าย" className="w-full p-3 bg-slate-50 border rounded-xl" name="zone" value={formData.zone} onChange={handleChange}/>
-                                    <input placeholder="สังกัดภาค" className="w-full p-3 bg-slate-50 border rounded-xl" name="region" value={formData.region} onChange={handleChange}/>
+                                <div className="space-y-6">
+                                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div className="bg-brand-50 p-2 rounded-lg text-brand-600"><LucideBriefcase className="w-5 h-5"/></div><h3 className="text-lg font-bold text-slate-700">ข้อมูลการทำงาน</h3></div>
+                                    <div className="grid md:grid-cols-2 gap-6">
+                                        <InputField label="ตำแหน่ง" name="position" value={formData.position} onChange={handleChange}/>
+                                        <InputField label="สาขา / แผนก" name="branch" value={formData.branch} onChange={handleChange}/>
+                                        <InputField label="เขต / ฝ่าย" name="zone" value={formData.zone} onChange={handleChange}/>
+                                        <InputField label="สังกัดภาค" name="region" value={formData.region} onChange={handleChange}/>
+                                    </div>
                                 </div>
                             )}
 
                             {currentStep === 5 && (
                                 <div className="space-y-6">
-                                    <h3 className="font-bold">อัปโหลดเอกสาร</h3>
+                                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100"><div className="bg-brand-50 p-2 rounded-lg text-brand-600"><LucideUpload className="w-5 h-5"/></div><h3 className="text-lg font-bold text-slate-700">อัปโหลดเอกสาร</h3></div>
                                     <div className="grid md:grid-cols-3 gap-4">
-                                        <div className="border-2 border-dashed p-4 rounded-xl text-center"><p className="text-sm font-bold mb-2">รูปถ่ายหน้าตรง</p><input type="file" onChange={(e)=>handleFileChange(e,'photo')} required className="text-xs"/></div>
-                                        <div className="border-2 border-dashed p-4 rounded-xl text-center"><p className="text-sm font-bold mb-2">สำเนาบัตรประชาชน</p><input type="file" onChange={(e)=>handleFileChange(e,'idCard')} required className="text-xs"/></div>
-                                        <div className="border-2 border-dashed p-4 rounded-xl text-center"><p className="text-sm font-bold mb-2">ผลสอบผ่าน (OIC)</p><input type="file" onChange={(e)=>handleFileChange(e,'examResult')} required className="text-xs"/></div>
+                                        <FileInput label="รูปถ่ายหน้าตรง" onChange={(e)=>handleFileChange(e,'photo')} required exampleUrl="https://via.placeholder.com/150" onPreview={setPreviewImage} value={files.photo}/>
+                                        <FileInput label="สำเนาบัตรประชาชน" onChange={(e)=>handleFileChange(e,'idCard')} required value={files.idCard}/>
+                                        <FileInput label="ผลสอบผ่าน (OIC)" onChange={(e)=>handleFileChange(e,'examResult')} required value={files.examResult}/>
                                     </div>
                                     {formData.examMode === ExamMode.SELF && (
-                                        <div className="bg-emerald-50 p-6 rounded-xl border border-emerald-100">
-                                            <label className="flex items-center gap-3 font-bold text-slate-800">
-                                                <input type="checkbox" name="wantReimbursement" checked={formData.wantReimbursement} onChange={handleChange} className="w-5 h-5 accent-emerald-600"/>
-                                                ขอเบิกเงินค่าสมัครสอบ (200 บาท)
-                                            </label>
-                                            {formData.wantReimbursement && (
-                                                <div className="grid md:grid-cols-3 gap-4 mt-4">
-                                                    <div className="border-2 border-dashed border-emerald-200 p-4 rounded-xl text-center bg-white"><p className="text-sm font-bold mb-2">ใบเสร็จ</p><input type="file" onChange={(e)=>handleFileChange(e,'receipt')} required className="text-xs"/></div>
-                                                    <div className="border-2 border-dashed border-emerald-200 p-4 rounded-xl text-center bg-white"><p className="text-sm font-bold mb-2">สำเนาบัตร (เบิก)</p><input type="file" onChange={(e)=>handleFileChange(e,'idCopyReimburse')} required className="text-xs"/></div>
-                                                    <div className="border-2 border-dashed border-emerald-200 p-4 rounded-xl text-center bg-white"><p className="text-sm font-bold mb-2">หน้าสมุดบัญชี</p><input type="file" onChange={(e)=>handleFileChange(e,'bankBook')} required className="text-xs"/></div>
-                                                </div>
-                                            )}
+                                        <div className="mt-8 bg-gradient-to-br from-emerald-50 to-teal-50 p-8 rounded-2xl border border-emerald-100/50 relative overflow-hidden">
+                                            <div className="relative z-10">
+                                                <label className="flex items-center gap-3 font-bold text-slate-800 cursor-pointer">
+                                                    <input type="checkbox" name="wantReimbursement" checked={formData.wantReimbursement} onChange={handleChange} className="w-5 h-5 accent-emerald-600"/>
+                                                    ขอเบิกเงินค่าสมัครสอบ (200 บาท)
+                                                </label>
+                                                {formData.wantReimbursement && (
+                                                    <div className="grid md:grid-cols-3 gap-4 mt-6 animate-fadeIn">
+                                                        <FileInput label="ใบเสร็จ" variant="green" onChange={(e)=>handleFileChange(e,'receipt')} required exampleUrl="https://via.placeholder.com/150" onPreview={setPreviewImage} value={files.receipt}/>
+                                                        <FileInput label="สำเนาบัตร (เบิก)" variant="green" onChange={(e)=>handleFileChange(e,'idCopyReimburse')} required value={files.idCopyReimburse}/>
+                                                        <FileInput label="หน้าสมุดบัญชี" variant="green" onChange={(e)=>handleFileChange(e,'bankBook')} required value={files.bankBook}/>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
                             )}
 
                              {currentStep === 6 && (
-                                <div className="bg-slate-50 p-6 rounded-xl space-y-4 text-sm">
-                                    <h3 className="font-bold text-lg border-b pb-2">สรุปข้อมูล</h3>
+                                <div className="bg-slate-50 p-6 rounded-xl space-y-4 text-sm border border-slate-200">
+                                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-200"><div className="bg-brand-50 p-2 rounded-lg text-brand-600"><LucideClipboardCheck className="w-5 h-5"/></div><h3 className="text-lg font-bold text-slate-700">ตรวจสอบข้อมูล</h3></div>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div><span className="text-slate-500 block">ชื่อ-นามสกุล</span><b>{formData.prefix}{formData.firstName} {formData.lastName}</b></div>
-                                        <div><span className="text-slate-500 block">รุ่นอบรม</span><b>{formData.trainingBatch}</b></div>
-                                        <div><span className="text-slate-500 block">รหัสพนักงาน</span><b>{formData.empId}</b></div>
-                                        <div><span className="text-slate-500 block">เบอร์โทร</span><b>{formData.phone}</b></div>
+                                        <ReviewItem label="ชื่อ-นามสกุล" value={`${formData.prefix}${formData.firstName} ${formData.lastName}`} />
+                                        <ReviewItem label="รุ่นอบรม" value={formData.trainingBatch} />
+                                        <ReviewItem label="รหัสพนักงาน" value={formData.empId} />
+                                        <ReviewItem label="เบอร์โทร" value={formData.phone} />
                                     </div>
+                                    
+                                    <div className="mt-6">
+                                         <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><LucideImage className="w-4 h-4"/> เอกสารแนบ</h4>
+                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                             <PreviewThumb file={files.photo} label="รูปถ่าย" />
+                                             <PreviewThumb file={files.idCard} label="บัตรประชาชน" />
+                                             <PreviewThumb file={files.examResult} label="ผลสอบ" />
+                                             {formData.wantReimbursement && (
+                                                 <>
+                                                    <PreviewThumb file={files.receipt} label="ใบเสร็จ" />
+                                                    <PreviewThumb file={files.idCopyReimburse} label="สำเนาบัตร (เบิก)" />
+                                                    <PreviewThumb file={files.bankBook} label="หน้าบัญชี" />
+                                                 </>
+                                             )}
+                                         </div>
+                                    </div>
+
+                                    {formData.wantReimbursement && <div className="mt-4 pt-4 border-t border-slate-200 text-emerald-600 text-xs font-bold flex items-center"><LucideCheckCircle className="w-3 h-3 mr-1"/> แจ้งความประสงค์ขอเบิกเงินค่าสอบ</div>}
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <div className="bg-slate-50/50 p-6 border-t flex justify-between">
-                        {currentStep > 1 && <button type="button" onClick={prevStep} className="px-6 py-3 font-bold text-slate-500">ย้อนกลับ</button>}
+                    <div className="bg-slate-50/50 p-8 border-t flex justify-between">
+                        {currentStep > 1 && <button type="button" onClick={prevStep} className="flex items-center text-slate-500 font-bold hover:text-slate-800 px-6 py-3 rounded-xl hover:bg-slate-100 transition-all"><LucideChevronLeft className="w-5 h-5 mr-1"/> ย้อนกลับ</button>}
                         {currentStep < 6 ? 
-                            <button type="button" onClick={nextStep} className="bg-brand-600 text-white px-8 py-3 rounded-xl font-bold ml-auto">ถัดไป</button> :
-                            <button type="submit" disabled={loading} className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold ml-auto">{loading?'Sending...':'ยืนยัน'}</button>
+                            <button type="button" onClick={nextStep} className="bg-brand-600 text-white px-8 py-3.5 rounded-xl font-bold ml-auto shadow-lg hover:shadow-brand-500/40 flex items-center">ถัดไป <LucideChevronRight className="w-5 h-5 ml-1"/></button> :
+                            <button type="submit" disabled={loading} className="bg-emerald-600 text-white px-10 py-3.5 rounded-xl font-bold ml-auto shadow-lg hover:shadow-emerald-500/40">{loading?'กำลังส่งข้อมูล...':'ยืนยันการลงทะเบียน'}</button>
                         }
                     </div>
                   </form>
@@ -523,7 +894,6 @@
         );
       };
 
-      // 3. StatusTracker
       const StatusTracker = () => {
           const [query, setQuery] = useState('');
           const [results, setResults] = useState(null);
@@ -537,51 +907,76 @@
               setLoading(false);
           };
 
+          const getStatusBadge = (status) => {
+              if (status === 'APPROVED') return <span className="bg-green-100 text-green-700 border border-green-200 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm">อนุมัติแล้ว</span>;
+              if (status === 'REJECTED') return <span className="bg-red-100 text-red-700 border border-red-200 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm">ไม่อนุมัติ</span>;
+              return <span className="bg-amber-100 text-amber-700 border border-amber-200 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm">รอตรวจสอบ</span>;
+          };
+
           return (
-              <div className="max-w-4xl mx-auto space-y-8">
+              <div className="max-w-4xl mx-auto space-y-10">
                   {/* QR Modal */}
-                  {showQr && <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={()=>setShowQr(false)}>
-                      <div className="bg-white p-6 rounded-2xl max-w-sm w-full relative">
+                  {showQr && <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn" onClick={()=>setShowQr(false)}>
+                      <div className="bg-white p-6 rounded-2xl max-w-sm w-full relative" onClick={e=>e.stopPropagation()}>
                           <button className="absolute top-2 right-2" onClick={()=>setShowQr(false)}><LucideX/></button>
                           <h3 className="text-center font-bold text-xl mb-4">QR CODE เข้าห้องไลน์</h3>
                           <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=LINE_GROUP_LINK" className="w-full"/>
                       </div>
                   </div>}
 
-                  <div className="bg-slate-900 text-white rounded-3xl p-10 text-center relative overflow-hidden">
-                      <div className="relative z-10">
-                          <h2 className="text-3xl font-bold mb-2">ตรวจสอบสถานะ</h2>
-                          <form onSubmit={handleSearch} className="flex bg-white rounded-full p-2 max-w-md mx-auto shadow-lg mt-6">
-                              <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="ระบุรหัสพนักงาน / เลขบัตร" className="flex-grow bg-transparent px-4 outline-none text-slate-800"/>
-                              <button type="submit" className="bg-brand-600 rounded-full px-6 py-2 font-bold">{loading?'...':'ค้นหา'}</button>
+                  <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-[#0f172a] text-white min-h-[300px] flex flex-col items-center justify-center p-8">
+                       <div className="absolute inset-0">
+                            <div className="absolute top-0 right-0 w-96 h-96 bg-brand-500/20 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3"></div>
+                            <div className="absolute bottom-0 left-0 w-96 h-96 bg-indigo-600/20 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/3"></div>
+                        </div>
+                      <div className="relative z-10 w-full max-w-2xl text-center">
+                          <h2 className="text-3xl font-bold mb-4">ตรวจสอบสถานะการลงทะเบียน</h2>
+                          <form onSubmit={handleSearch} className="flex bg-white rounded-full p-2 shadow-xl mt-6">
+                              <LucideSearch className="w-6 h-6 text-slate-400 ml-4 self-center"/>
+                              <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="ระบุรหัสพนักงาน / เลขบัตร" className="flex-grow bg-transparent px-4 py-3 outline-none text-slate-800 placeholder-slate-400 font-medium"/>
+                              <button type="submit" className="bg-slate-900 text-white rounded-full px-8 py-2.5 font-bold hover:bg-brand-600 transition-colors">{loading?'...':'ค้นหา'}</button>
                           </form>
                       </div>
                   </div>
 
-                  {results && <div className="space-y-4">
-                      {results.length===0 ? <div className="text-center p-10 bg-white rounded-2xl">ไม่พบข้อมูล</div> :
+                  {results && <div className="space-y-6 animate-slideUp">
+                      {results.length===0 ? 
+                       <div className="bg-white p-16 rounded-3xl border border-dashed border-slate-300 text-center">
+                           <LucideSearch className="w-12 h-12 text-slate-300 mx-auto mb-4"/>
+                           <h3 className="text-xl font-bold text-slate-800">ไม่พบข้อมูล</h3>
+                       </div> :
                        results.map(r => (
-                           <div key={r.id} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col md:flex-row gap-6 relative overflow-hidden">
-                               <div className="absolute left-0 top-0 bottom-0 w-2 bg-brand-500"></div>
+                           <div key={r.id} className="bg-white rounded-3xl shadow-soft p-8 border border-slate-100 flex flex-col md:flex-row gap-8 relative overflow-hidden">
+                               <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-brand-400 to-brand-600"></div>
                                <div className="flex-grow">
-                                   <div className="flex justify-between items-start">
-                                       <div>
-                                           <h3 className="text-xl font-bold">{r.prefix} {r.firstName} {r.lastName}</h3>
-                                           <p className="text-sm text-slate-500">ID: {r.empId} • {r.position}</p>
+                                   <div className="flex justify-between items-start mb-6">
+                                       <div className="flex items-center gap-4">
+                                            <div className="w-16 h-16 rounded-2xl bg-brand-50 flex items-center justify-center text-brand-600"><LucideUser className="w-8 h-8"/></div>
+                                            <div>
+                                                <h3 className="text-2xl font-bold text-slate-800">{r.prefix} {r.firstName} {r.lastName}</h3>
+                                                <p className="text-sm text-slate-500 mt-1 font-mono">ID: {r.empId} • {r.position}</p>
+                                            </div>
                                        </div>
-                                       <span className={`px-3 py-1 rounded-full text-xs font-bold ${r.status==='APPROVED'?'bg-green-100 text-green-700':r.status==='REJECTED'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>{r.status}</span>
+                                       {getStatusBadge(r.status)}
                                    </div>
-                                   <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
-                                       <div><span className="text-slate-400 block text-xs">รุ่นอบรม</span><b>{r.trainingBatch || '-'}</b></div>
-                                       <div><span className="text-slate-400 block text-xs">วันที่อบรม</span><b>{r.trainingDate || '-'}</b></div>
-                                       <div><span className="text-slate-400 block text-xs">สถานะเบิกเงิน</span>
-                                            {r.wantReimbursement ? <b className={r.reimbursementStatus==='เบิกจ่ายแล้ว'?'text-green-600':'text-amber-600'}>{r.reimbursementStatus}</b> : '-'}
+                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                       <InfoItem icon={<LucideBuilding className="w-4 h-4"/>} label="สาขา" value={r.branch} />
+                                       <InfoItem icon={<LucideClock className="w-4 h-4"/>} label="รุ่นอบรม" value={r.trainingBatch || '-'} />
+                                       <InfoItem icon={<LucideCalendar className="w-4 h-4"/>} label="วันที่อบรม" value={r.trainingDate || '-'} />
+                                       <div className="md:col-span-3">
+                                            {r.wantReimbursement && (
+                                                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                                    <LucideBanknote className="w-4 h-4 text-slate-400"/>
+                                                    <span className="text-xs font-bold text-slate-500 uppercase">สถานะเบิกเงิน:</span>
+                                                    <span className={`text-sm font-bold ${r.reimbursementStatus==='เบิกจ่ายแล้ว'?'text-green-600':'text-amber-500'}`}>{r.reimbursementStatus || 'รอตรวจสอบ'}</span>
+                                                </div>
+                                            )}
                                        </div>
                                    </div>
                                </div>
-                               <div className="bg-slate-50 p-4 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100" onClick={()=>setShowQr(true)}>
-                                   <LucideQrCode className="w-10 h-10 mb-1"/>
-                                   <span className="text-[10px] font-bold">QR เข้าห้องไลน์</span>
+                               <div className="bg-slate-50 p-8 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 transition-colors text-center w-full md:w-56" onClick={()=>setShowQr(true)}>
+                                   <LucideQrCode className="w-16 h-16 mb-2 text-slate-800"/>
+                                   <span className="text-[10px] font-bold text-brand-600 uppercase tracking-widest">QR เข้าห้องไลน์</span>
                                </div>
                            </div>
                        ))
@@ -591,34 +986,41 @@
           );
       };
 
-      // 4. AdminDashboard
       const AdminDashboard = () => {
           const [stats, setStats] = useState(null);
           const [data, setData] = useState([]);
-          const [tab, setTab] = useState('overview'); // overview, life, non_life, batch, reimburse
+          const [tab, setTab] = useState('overview'); 
           const [selectedBatch, setSelectedBatch] = useState('all');
           const [loading, setLoading] = useState(true);
-          
-          // Modals
-          const [editUser, setEditUser] = useState(null);
           const [showScreenshot, setShowScreenshot] = useState(false);
-          const [sessionInfo, setSessionInfo] = useState(null);
+          const [editingUser, setEditingUser] = useState(null);
+          const [showEditModal, setShowEditModal] = useState(false);
+          const [showDetailModal, setShowDetailModal] = useState(null);
+          const [exporting, setExporting] = useState(false);
 
           const fetchData = async () => {
               setLoading(true);
-              const [s, d] = await Promise.all([api.getStats(), api.getAllRegistrations()]);
-              setStats(s); setData(d); setLoading(false);
+              try {
+                  const [s, d] = await Promise.all([api.getStats(), api.getAllRegistrations()]);
+                  setStats(s); setData(d); 
+              } catch (e) {
+                  console.error(e);
+                  setStats({total: 0, pending: 0, approved: 0, rejected: 0, byType: [], sessions: []});
+                  setData([]);
+              } finally {
+                  setLoading(false);
+              }
           };
           useEffect(() => { fetchData(); }, []);
 
           const filteredData = () => {
               let res = [...data];
-              if(tab==='life') res = res.filter(r => r.licenseType.includes('Life') && !r.licenseType.includes('Non'));
-              if(tab==='non_life') res = res.filter(r => r.licenseType.includes('Non-Life'));
+              if(tab==='life') res = res.filter(r => r.licenseType && (r.licenseType.includes('Life') || r.licenseType.includes('ชีวิต')) && !(r.licenseType.includes('Non') || r.licenseType.includes('วินาศภัย')));
+              if(tab==='non_life') res = res.filter(r => r.licenseType && (r.licenseType.includes('Non-Life') || r.licenseType.includes('วินาศภัย')));
               if(tab==='batch') {
                   if(selectedBatch !== 'all') res = res.filter(r => r.trainingSessionId === selectedBatch);
-                  res = res.filter(r => r.trainingSessionId); // must have session
-                  res.sort((a,b) => a.idCard.localeCompare(b.idCard));
+                  res = res.filter(r => r.trainingSessionId); 
+                  res.sort((a,b) => String(a.idCard || '').localeCompare(String(b.idCard || '')));
               }
               if(tab==='reimburse') res = res.filter(r => r.wantReimbursement);
               return res;
@@ -627,127 +1029,352 @@
           const handleBatchStatus = async (id, status) => {
               await api.updateBatchStatus(id, status); fetchData();
           };
-          const handleReimburseStatus = async (id, status) => {
+          const handleReimbursementStatus = async (id, status) => {
               await api.updateReimbursementStatus(id, status); fetchData();
           };
 
-          const downloadImages = async () => {
-             // Mock Zip download since real file fetch blocked by CORS in simple implementation
-             // In production with GAS, you would need proxy or direct links. 
-             // Here we use dummy blob for demonstration as requested in previous steps to avoid crash.
-             const zip = new JSZip();
-             const dummyBlob = new Blob(["dummy"], {type: "text/plain"}); 
-             filteredData().forEach((r, i) => {
-                 zip.file(`${i+1}_${r.idCard}_photo.txt`, "Image links available in spreadsheet");
-             });
-             const content = await zip.generateAsync({type:"blob"});
-             saveAs(content, "Batch_Images.zip");
+          const handleSaveEdit = async (e) => {
+              e.preventDefault();
+              if (editingUser) {
+                  await api.updateRegistrationDetails(editingUser.id, editingUser);
+                  setShowEditModal(false);
+                  fetchData();
+              }
           };
           
-          const downloadReimburseAll = async () => {
-              const zip = new JSZip();
-              filteredData().forEach((r, i) => {
-                  const folder = zip.folder(`${i+1}_${r.firstName}`);
-                  folder.file("receipt_link.txt", r.receiptFile || "No file");
+          const copyScreenshotTable = () => {
+              const range = document.createRange();
+              range.selectNode(document.getElementById('screenshot-table'));
+              window.getSelection().removeAllRanges();
+              window.getSelection().addRange(range);
+              document.execCommand('copy');
+              window.getSelection().removeAllRanges();
+              alert('คัดลอกตารางเรียบร้อยแล้ว');
+          };
+          
+          const exportExcel = () => {
+              const rows = filteredData().map((r, i) => ({
+                  "ลำดับ": i + 1,
+                  "เลขบัตรประชาชน": `'${r.idCard}`, // Force string
+                  "ชื่อ-นามสกุล": `${r.prefix}${r.firstName} ${r.lastName}`,
+                  "เบอร์โทรศัพท์": `'${r.phone}`
+              }));
+              const ws = XLSX.utils.json_to_sheet(rows);
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, "Registrations");
+              XLSX.writeFile(wb, `Batch_Data_${new Date().toISOString().slice(0,10)}.xlsx`);
+          };
+          
+          const generatePdfForUser = async (user, index, zip) => {
+              const doc = new jsPDF();
+              doc.addFont('https://cdn.jsdelivr.net/npm/@fontsource/sarabun@4.5.0/files/sarabun-thai-400-normal.woff', 'Sarabun', 'normal');
+              doc.setFont('Sarabun', 'normal');
+              
+              // Helper to add text
+              const addText = (text, x, y, size=14, align='left') => {
+                  doc.setFontSize(size);
+                  doc.text(text, x, y, { align });
+              };
+              
+              addText('ใบสมัครอบรมขอรับใบอนุญาต', 105, 20, 20, 'center');
+              addText(`ลำดับที่: ${index}`, 180, 20, 12, 'right');
+              
+              const info = [
+                  ['รหัสพนักงาน', user.empId],
+                  ['ชื่อ-นามสกุล', `${user.prefix}${user.firstName} ${user.lastName}`],
+                  ['เลขบัตรประชาชน', user.idCard],
+                  ['เบอร์โทรศัพท์', user.phone],
+                  ['วันเกิด', new Date(user.dob || Date.now()).toLocaleDateString('th-TH')],
+                  ['อีเมล', user.email],
+                  ['รุ่นอบรม', user.trainingBatch],
+                  ['วันที่อบรม', user.trainingDate],
+                  ['ประเภท', user.licenseType],
+              ];
+              
+              doc.autoTable({
+                  startY: 30,
+                  head: [['หัวข้อ', 'รายละเอียด']],
+                  body: info,
+                  styles: { font: 'Sarabun', fontSize: 12 },
+                  headStyles: { fillColor: [59, 130, 246] }
               });
-              const content = await zip.generateAsync({type:"blob"});
-              saveAs(content, "Reimburse_All.zip");
-          }
+              
+              // Fetch images
+              try {
+                  const images = await api.getImagesForPdf(user.id);
+                  let yPos = doc.lastAutoTable.finalY + 10;
+                  
+                  const addImageToPdf = (b64, title) => {
+                      if(b64 && b64.data) {
+                          if (yPos > 250) { doc.addPage(); yPos = 20; }
+                          addText(title, 20, yPos, 14);
+                          yPos += 5;
 
-          if(loading) return <div className="flex justify-center h-96 items-center"><LucideLoader className="animate-spin"/></div>;
+                          try {
+                             const mime = b64.mimeType || 'image/jpeg';
+                             // Skip non-image types to avoid atob/corrupt errors in jsPDF
+                             if (!mime.startsWith('image/')) {
+                                  addText(`[ไฟล์ประเภท ${mime} ไม่สามารถแสดงตัวอย่างได้]`, 20, yPos + 10, 10);
+                                  yPos += 20;
+                                  return;
+                             }
+                             
+                             const imgData = `data:${mime};base64,${b64.data}`;
+                             const format = mime.includes('png') ? 'PNG' : 'JPEG';
+                             
+                             doc.addImage(imgData, format, 20, yPos, 100, 100, undefined, 'FAST');
+                             yPos += 110;
+                          } catch(err) {
+                             console.error("Image add error", err);
+                             addText('[ไม่สามารถแสดงรูปภาพได้]', 20, yPos + 10, 10);
+                             yPos += 20;
+                          }
+                      }
+                  };
+                  
+                  addImageToPdf(images.photo, '1. รูปถ่ายหน้าตรง');
+                  addImageToPdf(images.idCard, '2. สำเนาบัตรประชาชน');
+                  addImageToPdf(images.examResult, '3. ผลสอบผ่าน');
+              } catch(e) {
+                  console.error("Error fetching images for PDF", e);
+                  addText('(ไม่สามารถโหลดรูปภาพได้)', 20, doc.lastAutoTable.finalY + 20);
+              }
+              
+              const pdfBlob = doc.output('blob');
+              const shortType = user.licenseType.includes('Life') || user.licenseType.includes('ชีวิต') ? 'นช' : 'นว';
+              const filename = `${String(index).padStart(2,'0')}_${shortType}_${user.firstName} ${user.lastName}.pdf`;
+              
+              if(zip) {
+                  zip.file(filename, pdfBlob);
+              } else {
+                  saveAs(pdfBlob, filename);
+              }
+          };
+
+          const handleBatchDownload = async () => {
+              const users = filteredData();
+              if(users.length === 0) return alert('ไม่มีข้อมูล');
+              if(users.length > 20 && !confirm(`กำลังจะดาวน์โหลด ${users.length} รายการ อาจใช้เวลานาน ยืนยัน?`)) return;
+              
+              setExporting(true);
+              const zip = new JSZip();
+              
+              for (let i = 0; i < users.length; i++) {
+                  await generatePdfForUser(users[i], i+1, zip);
+              }
+              
+              const content = await zip.generateAsync({type:"blob"});
+              saveAs(content, `Batch_Documents_${new Date().toISOString().slice(0,10)}.zip`);
+              setExporting(false);
+          };
+          
+          if(loading) return <div className="flex justify-center h-96 items-center flex-col"><div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-brand-500 mb-4"></div><p className="text-brand-600 font-bold tracking-widest text-sm">กำลังโหลดข้อมูล...</p></div>;
+
+          const tabLabels = {
+              'overview': 'ภาพรวม',
+              'life': 'ประกันชีวิต',
+              'non_life': 'วินาศภัย',
+              'batch': 'จัดการรุ่น',
+              'reimburse': 'เบิกจ่าย'
+          };
 
           return (
-              <div className="space-y-6 pb-20">
-                  <div className="flex gap-2 overflow-x-auto pb-2 border-b">
+              <div className="space-y-8 pb-20">
+                  {exporting && <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center flex-col text-white"><LucideLoader className="w-12 h-12 animate-spin mb-4"/>กำลังสร้างไฟล์เอกสาร PDF... กรุณารอสักครู่</div>}
+
+                  {/* Detail Modal */}
+                  {showDetailModal && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={()=>setShowDetailModal(null)}>
+                          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-slideUp max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+                              <div className="bg-slate-50 px-6 py-4 border-b flex justify-between items-center sticky top-0">
+                                  <h3 className="font-bold text-lg">รายละเอียดผู้สมัคร</h3>
+                                  <button onClick={()=>setShowDetailModal(null)}><LucideX className="w-5 h-5"/></button>
+                              </div>
+                              <div className="p-6 space-y-4">
+                                  <div className="grid grid-cols-2 gap-4">
+                                      <InfoItem label="ชื่อ-นามสกุล" value={`${showDetailModal.prefix}${showDetailModal.firstName} ${showDetailModal.lastName}`} icon={<LucideUser className="w-4 h-4"/>}/>
+                                      <InfoItem label="รหัสพนักงาน" value={showDetailModal.empId} icon={<LucideBriefcase className="w-4 h-4"/>}/>
+                                      <InfoItem label="เลขบัตร ปชช." value={showDetailModal.idCard} icon={<LucideUser className="w-4 h-4"/>}/>
+                                      <InfoItem label="เบอร์โทร" value={showDetailModal.phone} icon={<LucideUser className="w-4 h-4"/>}/>
+                                      <InfoItem label="ตำแหน่ง" value={showDetailModal.position} icon={<LucideBuilding className="w-4 h-4"/>}/>
+                                      <InfoItem label="สาขา" value={showDetailModal.branch} icon={<LucideBuilding className="w-4 h-4"/>}/>
+                                      <InfoItem label="เขต" value={showDetailModal.zone} icon={<LucideMapPin className="w-4 h-4"/>}/>
+                                      <InfoItem label="ภาค" value={showDetailModal.region} icon={<LucideMapPin className="w-4 h-4"/>}/>
+                                  </div>
+                                  <div className="pt-4 border-t flex gap-3 justify-end">
+                                      <button onClick={()=>generatePdfForUser(showDetailModal, 0)} className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-brand-700"><LucideDownload className="w-4 h-4"/> โหลด PDF</button>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  )}
+
+                  {/* Screenshot Modal */}
+                  {showScreenshot && (
+                      <div className="fixed inset-0 z-50 bg-white overflow-auto p-10 animate-fadeIn">
+                           <div className="fixed top-4 right-4 flex gap-2">
+                               <button onClick={copyScreenshotTable} className="bg-brand-600 text-white px-6 py-2 rounded-full font-bold shadow-lg hover:bg-brand-700">คัดลอกตาราง</button>
+                               <button onClick={()=>setShowScreenshot(false)} className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600"><LucideX/></button>
+                           </div>
+                           <div className="max-w-4xl mx-auto border p-12 shadow-2xl mt-10" id="screenshot-table">
+                               <div className="text-center mb-8 space-y-2">
+                                   <h1 className="text-2xl font-bold">รายชื่ออบรมขอรับ {stats.sessions.find(s=>s.id===selectedBatch)?.licenseType.includes('Life') && !stats.sessions.find(s=>s.id===selectedBatch)?.licenseType.includes('Non') ? 'นช.' : 'นว.'}</h1>
+                                   <p className="text-lg">รุ่นที่ {stats.sessions.find(s=>s.id===selectedBatch)?.batchName || '-'}</p>
+                                   <p className="text-slate-500">วันที่ {stats.sessions.find(s=>s.id===selectedBatch)?.date ? new Date(stats.sessions.find(s=>s.id===selectedBatch).date).toLocaleDateString('th-TH', {day:'numeric', month:'long', year:'numeric'}) : '-'}</p>
+                               </div>
+                               <table className="w-full text-base border-collapse border border-slate-300">
+                                   <thead><tr className="bg-slate-100"><th className="border border-slate-300 p-3 text-center w-16">ลำดับ</th><th className="border border-slate-300 p-3 text-left">ชื่อ-นามสกุล</th><th className="border border-slate-300 p-3 text-left">สาขา</th><th className="border border-slate-300 p-3 text-center w-32">สถานะ</th></tr></thead>
+                                   <tbody>
+                                       {filteredData().map((r,i) => (
+                                           <tr key={r.id}>
+                                               <td className="border border-slate-300 p-3 text-center">{i+1}</td>
+                                               <td className="border border-slate-300 p-3">{r.prefix}{r.firstName} {r.lastName}</td>
+                                               <td className="border border-slate-300 p-3">{r.branch}</td>
+                                               <td className="border border-slate-300 p-3 text-center font-bold text-red-500">{r.batchStatus}</td>
+                                           </tr>
+                                       ))}
+                                   </tbody>
+                               </table>
+                           </div>
+                      </div>
+                  )}
+
+                  {/* Edit Modal */}
+                  {showEditModal && editingUser && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp">
+                               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                   <h3 className="font-bold text-lg text-slate-800">แก้ไขข้อมูล</h3>
+                                   <button onClick={()=>setShowEditModal(false)}><LucideX className="w-5 h-5"/></button>
+                               </div>
+                               <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+                                   <div className="grid grid-cols-2 gap-4">
+                                       <input className="border p-2 rounded" value={editingUser.firstName} onChange={e=>setEditingUser({...editingUser, firstName:e.target.value})} placeholder="ชื่อ"/>
+                                       <input className="border p-2 rounded" value={editingUser.lastName} onChange={e=>setEditingUser({...editingUser, lastName:e.target.value})} placeholder="นามสกุล"/>
+                                   </div>
+                                   <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded font-bold">บันทึก</button>
+                               </form>
+                          </div>
+                      </div>
+                  )}
+
+                  <div className="flex gap-2 overflow-x-auto pb-2 border-b border-slate-200/60 no-print">
                       {['overview','life','non_life','batch','reimburse'].map(t => (
-                          <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap ${tab===t?'bg-slate-800 text-white':'bg-white border'}`}>
-                             {t.toUpperCase()}
-                          </button>
+                          <TabButton key={t} active={tab===t} onClick={()=>setTab(t)} label={tabLabels[t]} icon={<LucideLayoutGrid className="w-4 h-4"/>} />
                       ))}
                   </div>
 
                   {tab === 'overview' ? (
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <div className="bg-white p-6 rounded-2xl shadow-sm border"><h3 className="text-slate-500 text-sm">ทั้งหมด</h3><p className="text-3xl font-bold">{stats.total}</p></div>
-                          <div className="bg-white p-6 rounded-2xl shadow-sm border"><h3 className="text-slate-500 text-sm">รออนุมัติ</h3><p className="text-3xl font-bold text-amber-500">{stats.pending}</p></div>
-                          <div className="bg-white p-6 rounded-2xl shadow-sm border"><h3 className="text-slate-500 text-sm">อนุมัติแล้ว</h3><p className="text-3xl font-bold text-green-500">{stats.approved}</p></div>
-                          <div className="bg-white p-6 rounded-2xl shadow-sm border"><h3 className="text-slate-500 text-sm">ไม่ผ่าน</h3><p className="text-3xl font-bold text-red-500">{stats.rejected}</p></div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                          <StatCard title="ลงทะเบียนทั้งหมด" value={stats.total} icon={<LucideUsers className="w-6 h-6"/>} color="text-brand-600" bg="bg-brand-50" trend="+12%"/>
+                          <StatCard title="รอตรวจสอบ" value={stats.pending} icon={<LucideClock className="w-6 h-6"/>} color="text-amber-500" bg="bg-amber-50"/>
+                          <StatCard title="อนุมัติแล้ว" value={stats.approved} icon={<LucideCheckCircle className="w-6 h-6"/>} color="text-emerald-500" bg="bg-emerald-50"/>
+                          <StatCard title="ไม่ผ่าน" value={stats.rejected} icon={<LucideXCircle className="w-6 h-6"/>} color="text-red-500" bg="bg-red-50"/>
+                          <div className="md:col-span-4 h-80 bg-white p-6 rounded-3xl border border-slate-100 shadow-soft">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats.byType}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                  <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                                  <YAxis axisLine={false} tickLine={false} />
+                                  <RechartsTooltip cursor={{fill: '#f1f5f9'}} />
+                                  <Bar dataKey="value" fill="#3b82f6" radius={[4,4,0,0]} barSize={60}/>
+                                </BarChart>
+                              </ResponsiveContainer>
+                          </div>
                       </div>
                   ) : (
-                      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-                          <div className="p-4 border-b flex justify-between items-center flex-wrap gap-2">
-                              <h3 className="font-bold">รายการข้อมูล ({filteredData().length})</h3>
-                              <div className="flex gap-2">
+                      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-soft overflow-hidden min-h-[500px]">
+                          <div className="p-8 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                              <h3 className="text-xl font-bold text-slate-800">รายการข้อมูล ({filteredData().length})</h3>
+                              <div className="flex gap-2 flex-wrap">
                                   {tab === 'batch' && (
                                       <>
-                                        <select value={selectedBatch} onChange={e=>setSelectedBatch(e.target.value)} className="border rounded-lg px-2 py-1 text-sm">
+                                        <select value={selectedBatch} onChange={e=>setSelectedBatch(e.target.value)} className="border rounded-xl px-4 py-2 text-sm font-bold outline-none cursor-pointer">
                                             <option value="all">ทุกรุ่น</option>
                                             {stats.sessions.map(s=><option key={s.id} value={s.id}>{s.batchName}</option>)}
                                         </select>
-                                        <button onClick={()=>setShowScreenshot(true)} className="px-3 py-1 bg-slate-100 rounded text-sm font-bold flex gap-1 items-center"><LucideCamera className="w-4 h-4"/> Screen</button>
-                                        <button onClick={downloadImages} className="px-3 py-1 bg-sky-600 text-white rounded text-sm font-bold flex gap-1 items-center"><LucideImages className="w-4 h-4"/> ZIP</button>
+                                        <button onClick={()=>setShowScreenshot(true)} className="px-4 py-2 bg-slate-100 rounded-xl text-sm font-bold flex gap-2 items-center hover:bg-slate-200"><LucideCamera className="w-4 h-4"/> Screenshot</button>
+                                        <button onClick={handleBatchDownload} className="px-4 py-2 bg-sky-600 text-white rounded-xl text-sm font-bold flex gap-2 items-center hover:bg-sky-700 shadow-lg shadow-sky-200/50"><LucideDownload className="w-4 h-4"/> โหลด PDF/รูป</button>
+                                        <button onClick={exportExcel} className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-bold flex gap-2 items-center hover:bg-green-700 shadow-lg shadow-green-200/50"><LucideFileSpreadsheet className="w-4 h-4"/> โหลด Excel</button>
                                       </>
-                                  )}
-                                  {tab === 'reimburse' && (
-                                      <button onClick={downloadReimburseAll} className="px-3 py-1 bg-amber-500 text-white rounded text-sm font-bold flex gap-1 items-center"><LucideArchive className="w-4 h-4"/> Load All</button>
                                   )}
                               </div>
                           </div>
                           <div className="overflow-x-auto">
                               <table className="w-full text-sm text-left">
-                                  <thead className="bg-slate-50 font-bold border-b">
+                                  <thead className="bg-slate-50 font-bold border-b border-slate-200 text-slate-700 whitespace-nowrap">
                                       <tr>
-                                          <th className="p-3 w-10">#</th>
-                                          {tab === 'batch' && <th className="p-3">สถานะรุ่น</th>}
-                                          {tab === 'reimburse' && <th className="p-3">สถานะเบิก</th>}
-                                          {tab !== 'batch' && tab !== 'reimburse' && <th className="p-3">สถานะ</th>}
-                                          <th className="p-3">ชื่อ-นามสกุล</th>
-                                          <th className="p-3">บัตร ปชช.</th>
-                                          <th className="p-3">รหัส พนง.</th>
-                                          {tab === 'batch' && <>
-                                            <th className="p-3">สาขา</th><th className="p-3">เขต</th><th className="p-3">ภาค</th><th className="p-3">หมายเหตุ</th>
-                                          </>}
-                                          <th className="p-3 text-right">Actions</th>
+                                          <th className="px-6 py-4 w-12">#</th>
+                                          {tab === 'batch' ? (
+                                              <>
+                                                <th className="px-6 py-4">สถานะรุ่น</th>
+                                                <th className="px-6 py-4">บัตร ปชช.</th>
+                                                <th className="px-6 py-4">ชื่อ-นามสกุล</th>
+                                                <th className="px-6 py-4">รหัส พนง.</th>
+                                                <th className="px-6 py-4">สาขา</th>
+                                                <th className="px-6 py-4">เบอร์โทร</th>
+                                                <th className="px-6 py-4 text-center">ดูข้อมูล</th>
+                                              </>
+                                          ) : (
+                                              <>
+                                                {tab === 'reimburse' && <th className="px-6 py-4">สถานะเบิก</th>}
+                                                {tab !== 'reimburse' && <th className="px-6 py-4">สถานะ</th>}
+                                                <th className="px-6 py-4">ชื่อ-นามสกุล</th>
+                                                <th className="px-6 py-4">บัตร ปชช.</th>
+                                                <th className="px-6 py-4">รหัส พนง.</th>
+                                                <th className="px-6 py-4 text-center sticky right-0 bg-slate-50">Actions</th>
+                                              </>
+                                          )}
                                       </tr>
                                   </thead>
-                                  <tbody className="divide-y">
+                                  <tbody className="divide-y divide-slate-100 whitespace-nowrap">
                                       {filteredData().map((r, i) => (
-                                          <tr key={r.id} className="hover:bg-slate-50">
-                                              <td className="p-3 text-slate-500">{i+1}</td>
+                                          <tr key={r.id} className="hover:bg-blue-50/30 transition-colors">
+                                              <td className="px-6 py-4 text-slate-400 font-mono">{i+1}</td>
                                               
-                                              {/* Status Logic */}
                                               {tab === 'batch' ? (
-                                                  <td className="p-3">
-                                                      <select value={r.batchStatus || BatchStatus.NOT_JOINED_LINE} onChange={(e)=>handleBatchStatus(r.id, e.target.value)} className="bg-slate-100 border-none rounded text-xs font-bold py-1">
-                                                          {Object.values(BatchStatus).map(s=><option key={s} value={s}>{s}</option>)}
-                                                      </select>
-                                                  </td>
-                                              ) : tab === 'reimburse' ? (
-                                                  <td className="p-3">
-                                                      {r.reimbursementStatus === 'เบิกจ่ายแล้ว' ? 
-                                                        <span className="text-green-600 font-bold text-xs flex items-center gap-1"><LucideCheckCircle className="w-3 h-3"/> จ่ายแล้ว</span> :
-                                                        <span className="text-amber-500 font-bold text-xs flex items-center gap-1"><LucideClock className="w-3 h-3"/> รอจ่าย</span>
-                                                      }
-                                                  </td>
+                                                  <>
+                                                      <td className="px-6 py-4">
+                                                          <select value={r.batchStatus || BatchStatus.NOT_JOINED_LINE} onChange={(e)=>handleBatchStatus(r.id, e.target.value)} className="bg-slate-100 border-none rounded-lg text-xs font-bold py-1.5 px-2 outline-none cursor-pointer">
+                                                              {Object.values(BatchStatus).map(s=><option key={s} value={s}>{s}</option>)}
+                                                          </select>
+                                                      </td>
+                                                      <td className="px-6 py-4 font-mono">{r.idCard}</td>
+                                                      <td className="px-6 py-4 font-bold text-slate-700">{r.prefix}{r.firstName} {r.lastName}</td>
+                                                      <td className="px-6 py-4 font-mono">{r.empId}</td>
+                                                      <td className="px-6 py-4">{r.branch}</td>
+                                                      <td className="px-6 py-4">{r.phone}</td>
+                                                      <td className="px-6 py-4 text-center">
+                                                          <button onClick={()=>setShowDetailModal(r)} className="px-3 py-1 bg-slate-200 hover:bg-slate-300 rounded text-xs font-bold">รายละเอียด</button>
+                                                      </td>
+                                                  </>
                                               ) : (
-                                                  <td className="p-3"><span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-bold">{r.status}</span></td>
+                                                  <>
+                                                      {tab === 'reimburse' ? (
+                                                          <td className="px-6 py-4">
+                                                              {r.reimbursementStatus === 'เบิกจ่ายแล้ว' ? 
+                                                                <span className="text-green-600 font-bold text-xs flex items-center gap-1"><LucideCheckCircle className="w-3 h-3"/> จ่ายแล้ว</span> :
+                                                                <span className="text-amber-500 font-bold text-xs flex items-center gap-1"><LucideClock className="w-3 h-3"/> รอจ่าย</span>
+                                                              }
+                                                          </td>
+                                                      ) : (
+                                                          <td className="px-6 py-4"><StatusBadge status={r.status} /></td>
+                                                      )}
+
+                                                      <td className="px-6 py-4 font-bold text-slate-700">{r.prefix} {r.firstName} {r.lastName}</td>
+                                                      <td className="px-6 py-4 font-mono text-slate-500">{r.idCard}</td>
+                                                      <td className="px-6 py-4 font-mono"><span className="bg-slate-100 px-2 py-1 rounded text-slate-600">{r.empId}</span></td>
+                                                      
+                                                      <td className="px-6 py-4 text-center sticky right-0 bg-white">
+                                                          <div className="flex justify-center gap-2">
+                                                            {tab === 'reimburse' && r.reimbursementStatus !== 'เบิกจ่ายแล้ว' && (
+                                                                <button onClick={()=>handleReimbursementStatus(r.id, 'เบิกจ่ายแล้ว')} className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"><LucideCheckSquare className="w-4 h-4"/></button>
+                                                            )}
+                                                            <button onClick={()=>{setEditingUser(r); setShowEditModal(true);}} className="p-1.5 hover:bg-slate-100 rounded text-slate-500"><LucideEdit className="w-4 h-4"/></button>
+                                                          </div>
+                                                      </td>
+                                                  </>
                                               )}
-
-                                              <td className="p-3">{r.prefix} {r.firstName} {r.lastName}</td>
-                                              <td className="p-3 font-mono">{r.idCard}</td>
-                                              <td className="p-3 font-mono">{r.empId}</td>
-                                              
-                                              {tab === 'batch' && <>
-                                                <td className="p-3">{r.branch}</td><td className="p-3">{r.zone}</td><td className="p-3">{r.region}</td><td className="p-3 text-slate-400 italic">{r.note||'-'}</td>
-                                              </>}
-
-                                              <td className="p-3 text-right flex justify-end gap-2">
-                                                  {tab === 'reimburse' && r.reimbursementStatus !== 'เบิกจ่ายแล้ว' && (
-                                                      <button onClick={()=>handleReimburseStatus(r.id, 'เบิกจ่ายแล้ว')} className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"><LucideCheckSquare className="w-4 h-4"/></button>
-                                                  )}
-                                                  {/* Link to view files (Real implementation would open modal with image) */}
-                                                  {r.photoFile && <a href={r.photoFile} target="_blank" className="p-1.5 bg-slate-100 text-slate-500 rounded"><LucideEye className="w-4 h-4"/></a>}
-                                              </td>
                                           </tr>
                                       ))}
                                   </tbody>
@@ -755,30 +1382,10 @@
                           </div>
                       </div>
                   )}
-                  
-                  {/* Screenshot Modal (Simplified) */}
-                  {showScreenshot && (
-                      <div className="fixed inset-0 z-50 bg-white overflow-auto p-10">
-                           <button onClick={()=>setShowScreenshot(false)} className="fixed top-4 right-4 bg-red-500 text-white p-2 rounded-full"><LucideX/></button>
-                           <div className="max-w-3xl mx-auto border p-10 shadow-lg">
-                               <h1 className="text-2xl font-bold text-center mb-4">รายชื่ออบรม</h1>
-                               <h2 className="text-center font-bold text-red-500 mb-4">รายชื่อผู้ที่ยังไม่เข้าห้องไลน์</h2>
-                               <table className="w-full text-sm border-collapse border">
-                                   <thead><tr className="bg-slate-100"><th className="border p-2">ลำดับ</th><th className="border p-2">ชื่อ-นามสกุล</th><th className="border p-2">สาขา</th><th className="border p-2">สถานะ</th></tr></thead>
-                                   <tbody>
-                                       {filteredData().filter(r => (!r.batchStatus || r.batchStatus === BatchStatus.NOT_JOINED_LINE)).map((r,i) => (
-                                           <tr key={r.id}><td className="border p-2 text-center">{i+1}</td><td className="border p-2">{r.prefix}{r.firstName} {r.lastName}</td><td className="border p-2">{r.branch}</td><td className="border p-2 text-red-500">ยังไม่เข้าไลน์</td></tr>
-                                       ))}
-                                   </tbody>
-                               </table>
-                           </div>
-                      </div>
-                  )}
               </div>
           );
       };
 
-      // 5. Main App
       const App = () => {
         const [view, setView] = useState('public');
         const [tab, setTab] = useState('register');
@@ -794,23 +1401,34 @@
           <Layout activeView={view} onChangeView={setView} isAdminLoggedIn={isAdmin} onLogout={()=>{setIsAdmin(false); setView('public');}}>
             {view === 'public' ? (
                <div className="animate-fadeIn">
-                   <div className="flex justify-center -mt-2 mb-10">
-                       <div className="bg-white p-1.5 rounded-full shadow border inline-flex">
-                           <button onClick={()=>setTab('register')} className={`px-6 py-2 rounded-full font-bold text-sm ${tab==='register'?'bg-slate-900 text-white':'text-slate-500'}`}>ลงทะเบียน</button>
-                           <button onClick={()=>setTab('track')} className={`px-6 py-2 rounded-full font-bold text-sm ${tab==='track'?'bg-slate-900 text-white':'text-slate-500'}`}>ติดตามสถานะ</button>
+                   <div className="flex justify-center -mt-2 mb-12">
+                       <div className="bg-white p-1.5 rounded-full shadow-lg shadow-slate-200/50 border border-slate-100 inline-flex items-center relative z-10">
+                           <button onClick={()=>setTab('register')} className={`relative px-8 py-3 rounded-full text-sm font-bold transition-all duration-300 flex items-center gap-2 ${tab==='register'?'bg-slate-900 text-white shadow-md':'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}><LucideUserPlus className="w-4 h-4"/> ลงทะเบียน</button>
+                           <button onClick={()=>setTab('track')} className={`relative px-8 py-3 rounded-full text-sm font-bold transition-all duration-300 flex items-center gap-2 ${tab==='track'?'bg-slate-900 text-white shadow-md':'text-slate-500 hover:text-slate-900 hover:bg-slate-50'}`}><LucideSearch className="w-4 h-4"/> ติดตามสถานะ</button>
                        </div>
                    </div>
                    {tab==='register' ? <RegistrationForm/> : <StatusTracker/>}
                </div>
             ) : (
                 isAdmin ? <AdminDashboard/> : 
-                <div className="flex justify-center py-20">
-                    <form onSubmit={handleLogin} className="bg-white p-10 rounded-3xl shadow-xl max-w-sm w-full text-center border">
-                        <LucideShield className="w-12 h-12 mx-auto text-brand-600 mb-4"/>
-                        <h2 className="text-xl font-bold mb-6">Admin Portal</h2>
-                        <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} className="w-full p-3 border rounded-xl mb-4" placeholder="Password"/>
-                        <button className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold">Login</button>
-                    </form>
+                <div className="flex justify-center py-20 animate-fadeIn">
+                    <div className="w-full max-w-[420px] bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-slate-200 border border-white relative overflow-hidden group">
+                         <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-brand-500 via-indigo-500 to-purple-500"></div>
+                        <div className="w-20 h-20 bg-gradient-to-br from-white to-slate-50 rounded-2xl rotate-12 flex items-center justify-center mx-auto mb-8 shadow-lg border border-slate-100">
+                            <LucideShield className="w-10 h-10 text-brand-600"/>
+                        </div>
+                        <h2 className="text-2xl font-extrabold text-slate-800 mb-2 text-center">Admin Portal</h2>
+                        <form onSubmit={handleLogin} className="space-y-5 mt-8">
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-4">Password</label>
+                                <div className="relative flex items-center">
+                                    <LucideLock className="absolute left-5 text-slate-400 w-5 h-5"/>
+                                    <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} className="w-full pl-14 pr-4 py-4 rounded-2xl border border-slate-200 bg-white focus:border-brand-500 outline-none transition-all font-medium text-lg placeholder-slate-300 shadow-sm" placeholder="••••••••"/>
+                                </div>
+                            </div>
+                            <button className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-brand-600 transition-all shadow-xl hover:shadow-brand-500/20 flex items-center justify-center gap-2">เข้าสู่ระบบ <LucideArrowRight className="w-4 h-4"/></button>
+                        </form>
+                    </div>
                 </div>
             )}
           </Layout>
